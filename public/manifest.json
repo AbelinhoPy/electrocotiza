@@ -1,0 +1,22 @@
+{
+  "name": "ElectroCotiza - Construlogica",
+  "short_name": "ElectroCotiza",
+  "description": "Cotizador de materiales eléctricos y comparador de precios de ferreterías en Paraguay.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0F2137",
+  "theme_color": "#0F2137",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/assets/logo.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/assets/logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
