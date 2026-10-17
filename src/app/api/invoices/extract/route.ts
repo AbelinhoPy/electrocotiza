@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
   try {
-    const { image, fileName } = await request.json();
+    const { image, fileName, apiKey: clientApiKey } = await request.json();
 
     if (!image) {
       return NextResponse.json(
@@ -18,183 +18,156 @@ export async function POST(request: Request) {
     const mimeMatch = image.match(/^data:(image\/\w+);base64,/);
     const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
 
-    const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
+    const apiKey = (clientApiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '').trim();
 
-    // 2. Si hay clave de Gemini API, usar Gemini 1.5 Flash Vision
+    // 2. Si hay clave de Gemini API, invocar Gemini Vision AI
     if (apiKey) {
       try {
-        const geminiRes = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [
-                {
-                  parts: [
-                    {
-                      text: `Eres un asistente contable y especialista en facturas comerciales y comprobantes electrónicos KuDE de Paraguay para obras y materiales eléctricos.
-Analiza detenidamente esta imagen de factura. Extrae los datos y devuélvelos EXCLUSIVAMENTE como un objeto JSON sin formato markdown ni texto adicional:
+        const models = ['gemini-1.5-flash', 'gemini-2.0-flash'];
+        let geminiRes: Response | null = null;
+        let lastErr = '';
+
+        for (const model of models) {
+          const res = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [
+                  {
+                    parts: [
+                      {
+                        text: `Eres un asistente contable y especialista en facturas comerciales y comprobantes electrónicos KuDE de Paraguay para obras y materiales eléctricos.
+Analiza con total precisión esta imagen de factura o ticket de ferretería paraguayo.
+Extrae TODOS los materiales listados con sus cantidades, precios unitarios y totales en guaraníes.
+
+REGLAS CRÍTICAS DE PARAGUAY:
+- Los precios en guaraníes (PYG) NO tienen centavos ni decimales. Si ves puntos como separadores de miles (ejemplo: 465.600 o 1.500.831), conviértelos a números enteros puros (465600 o 1500831).
+- Extrae CADA material o ítem individual en el arreglo "items".
+- Devuelve EXCLUSIVAMENTE un objeto JSON válido con esta estructura:
 {
-  "provider_name": "Nombre o Razón Social del proveedor/ferretería",
-  "ruc": "RUC del proveedor con dígito verificador (ej: 80000000-0)",
-  "invoice_number": "Número legal de factura (ej: 001-001-0012345)",
+  "provider_name": "Nombre o Razón Social del proveedor/ferretería (ej: ENERLUZ S.A., ELECTRO SYSTEM S.R.L., etc.)",
+  "ruc": "RUC del proveedor con dígito verificador (ej: 80022415-9)",
+  "invoice_number": "Número legal de factura (ej: 001-001-0033088)",
   "timbrado": "Número de timbrado de 8 dígitos",
   "issue_date": "Fecha en formato YYYY-MM-DD",
   "payment_condition": "contado o credito",
-  "total_pyg": 000000 (total en guaraníes como número entero sin decimales),
+  "total_pyg": 1650000,
   "items": [
     {
-      "raw_description": "Descripción clara del material o servicio",
+      "raw_description": "Nombre claro del material o conductor",
       "quantity": 1,
       "unit": "un, m, barra, rollo, caja, kg",
-      "unit_cost_pyg": 00000 (precio unitario en guaraníes),
-      "total_pyg": 00000 (total de la línea en guaraníes)
+      "unit_cost_pyg": 825000,
+      "total_pyg": 825000
     }
   ]
 }`,
-                    },
-                    {
-                      inline_data: {
-                        mime_type: mimeType,
-                        data: base64Data,
                       },
-                    },
-                  ],
+                      {
+                        inline_data: {
+                          mime_type: mimeType,
+                          data: base64Data,
+                        },
+                      },
+                    ],
+                  },
+                ],
+                generationConfig: {
+                  temperature: 0.1,
+                  response_mime_type: 'application/json',
                 },
-              ],
-              generationConfig: {
-                temperature: 0.1,
-                response_mime_type: 'application/json',
-              },
-            }),
-          }
-        );
+              }),
+            }
+          );
 
-        if (geminiRes.ok) {
+          if (res.ok) {
+            geminiRes = res;
+            break;
+          } else {
+            const errText = await res.text();
+            lastErr = `${model} status ${res.status}: ${errText}`;
+          }
+        }
+
+        if (geminiRes && geminiRes.ok) {
           const geminiData = await geminiRes.json();
           const responseText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
           if (responseText) {
-            const parsed = JSON.parse(responseText);
+            const cleanText = responseText.replace(/```json/gi, '').replace(/```/g, '').trim();
+            const parsed = JSON.parse(cleanText);
+
+            // Sanitizador robusto para números guaraníes (quita puntos de miles)
+            const cleanNumber = (val: any): number => {
+              if (typeof val === 'number') return Math.round(val);
+              if (typeof val === 'string') {
+                const digits = val.replace(/\D/g, '');
+                return digits ? parseInt(digits, 10) : 0;
+              }
+              return 0;
+            };
+
+            const sanitizedItems = (parsed.items || []).map((it: any) => {
+              const qty = cleanNumber(it.quantity) || 1;
+              const unitCost = cleanNumber(it.unit_cost_pyg);
+              const lineTotal = cleanNumber(it.total_pyg) || (unitCost * qty);
+              return {
+                raw_description: String(it.raw_description || 'Material Eléctrico'),
+                quantity: qty,
+                unit: String(it.unit || 'un'),
+                unit_cost_pyg: unitCost,
+                total_pyg: lineTotal,
+              };
+            });
+
+            const calculatedTotal = cleanNumber(parsed.total_pyg) || sanitizedItems.reduce((acc: number, it: any) => acc + it.total_pyg, 0);
+
             return NextResponse.json({
               success: true,
               method: 'gemini_vision_ai',
-              invoice: parsed,
+              invoice: {
+                provider_name: parsed.provider_name || 'Proveedor Detectado',
+                ruc: parsed.ruc || '',
+                invoice_number: parsed.invoice_number || '',
+                timbrado: parsed.timbrado || '',
+                issue_date: parsed.issue_date || new Date().toISOString().split('T')[0],
+                payment_condition: parsed.payment_condition || 'contado',
+                total_pyg: calculatedTotal,
+                items: sanitizedItems,
+              },
             });
           }
+        } else {
+          console.warn('Gemini API Error:', lastErr);
         }
-      } catch (geminiErr) {
-        console.warn('Error en llamada a Gemini Vision, aplicando extractor inteligente de respaldo:', geminiErr);
+      } catch (geminiErr: any) {
+        console.warn('Excepción en llamada a Gemini Vision:', geminiErr);
       }
     }
 
-    // 3. Extractor de Respaldo Inteligente (KuDE & Comprobantes Físicos)
-    // Se activa si no hay API key o si hubo algún timeout de red
-    const today = new Date().toISOString().split('T')[0];
-    const nameLower = (fileName || '').toLowerCase();
-
-    let detectedProvider = 'Proveedor de Materiales Eléctricos';
-    let detectedRuc = '80000000-0';
-    let detectedTimbrado = '18492000';
-    let detectedCondition = 'contado';
-    let defaultItems = [
-      {
-        raw_description: 'MATERIAL ELECTRICO SEGÚN COMPROBANTE',
-        quantity: 1,
-        unit: 'un',
-        unit_cost_pyg: 0,
-        total_pyg: 0,
-      },
-    ];
-
-    if (nameLower.includes('enerluz')) {
-      detectedProvider = 'ENERLUZ S.A.';
-      detectedRuc = '80022415-9';
-      detectedTimbrado = '16638267';
-      defaultItems = [
-        {
-          raw_description: 'BARRA COBRE ELECTROLITICO',
-          quantity: 2,
-          unit: 'barra',
-          unit_cost_pyg: 825000,
-          total_pyg: 1650000,
-        },
-      ];
-    } else if (nameLower.includes('fixopar')) {
-      detectedProvider = 'FIXOPAR S.R.L.';
-      detectedRuc = '80011234-5';
-      detectedTimbrado = '17890123';
-      defaultItems = [
-        {
-          raw_description: 'BULON 8.8 M10X25',
-          quantity: 20,
-          unit: 'un',
-          unit_cost_pyg: 1750,
-          total_pyg: 35000,
-        },
-        {
-          raw_description: 'TUERCA M10 ZINCADA',
-          quantity: 20,
-          unit: 'un',
-          unit_cost_pyg: 1100,
-          total_pyg: 22000,
-        },
-      ];
-    } else if (nameLower.includes('electro system') || nameLower.includes('electrosystem')) {
-      detectedProvider = 'ELECTRO SYSTEM S.R.L.';
-      detectedRuc = '80033556-7';
-      detectedTimbrado = '18223400';
-      defaultItems = [
-        {
-          raw_description: 'DISYUNTOR TERMOMAGNETICO TRIPOLAR 3P',
-          quantity: 2,
-          unit: 'un',
-          unit_cost_pyg: 268088,
-          total_pyg: 536176,
-        },
-      ];
-    } else if (nameLower.includes('electropar')) {
-      detectedProvider = 'ELECTROPAR S.A.';
-      detectedRuc = '80001234-5';
-      detectedTimbrado = '17654321';
-      defaultItems = [
-        {
-          raw_description: 'CABLE MULTIFILAR ATOXICO 2.0 MM2 ROLLO 200M',
-          quantity: 1,
-          unit: 'rollo',
-          unit_cost_pyg: 465600,
-          total_pyg: 465600,
-        },
-      ];
-    } else if (nameLower.includes('compresores')) {
-      detectedProvider = 'CENTRO DE LOS COMPRESORES S.A.';
-      detectedRuc = '80045678-9';
-      detectedTimbrado = '16554433';
-      defaultItems = [
-        {
-          raw_description: 'TUBO TERMOFUSION PN20 25MM',
-          quantity: 10,
-          unit: 'barra',
-          unit_cost_pyg: 22000,
-          total_pyg: 220000,
-        },
-      ];
-    }
-
-    const totalCalculated = defaultItems.reduce((acc, it) => acc + it.total_pyg, 0);
-
+    // 3. Si no hay clave de API configurada en Vercel o en la App
     return NextResponse.json({
       success: true,
-      method: 'smart_invoice_parser',
+      method: 'no_api_key',
+      warning: !apiKey ? 'missing_api_key' : 'gemini_error',
       invoice: {
-        provider_name: detectedProvider,
-        ruc: detectedRuc,
-        invoice_number: `001-001-${Math.floor(1000000 + Math.random() * 9000000)}`,
-        timbrado: detectedTimbrado,
-        issue_date: today,
-        payment_condition: detectedCondition,
-        total_pyg: totalCalculated,
-        items: defaultItems,
+        provider_name: '',
+        ruc: '',
+        invoice_number: '',
+        timbrado: '',
+        issue_date: new Date().toISOString().split('T')[0],
+        payment_condition: 'contado',
+        total_pyg: 0,
+        items: [
+          {
+            raw_description: '',
+            quantity: 1,
+            unit: 'un',
+            unit_cost_pyg: 0,
+            total_pyg: 0,
+          },
+        ],
       },
     });
   } catch (error: any) {

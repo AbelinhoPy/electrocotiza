@@ -82,6 +82,21 @@ export const StorageService = {
     setLocal(STORAGE_KEYS.SETTINGS, settings);
   },
 
+  // --- GEMINI VISION AI KEY ---
+  getGeminiApiKey(): string {
+    if (typeof window === 'undefined') return '';
+    return localStorage.getItem('electrocotiza_gemini_api_key') || '';
+  },
+  setGeminiApiKey(key: string): void {
+    if (typeof window === 'undefined') return;
+    const clean = key.trim();
+    if (!clean) {
+      localStorage.removeItem('electrocotiza_gemini_api_key');
+    } else {
+      localStorage.setItem('electrocotiza_gemini_api_key', clean);
+    }
+  },
+
   // --- PROVIDERS ---
   getProviders(): Provider[] {
     return getLocal(STORAGE_KEYS.PROVIDERS, INITIAL_PROVIDERS);

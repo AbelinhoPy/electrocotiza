@@ -15,7 +15,12 @@ import {
   ChevronUp, 
   ArrowRight,
   RotateCcw,
-  Check
+  Check,
+  Plus,
+  Key,
+  ExternalLink,
+  HelpCircle,
+  X
 } from 'lucide-react';
 import { StorageService } from '@/lib/data/storage';
 import { CanonicalProduct, IngestedInvoice, Provider } from '@/lib/types';
@@ -64,7 +69,13 @@ export default function IngestaPage() {
   const [notification, setNotification] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState<boolean>(false);
 
-  // Borrador de factura escaneada recientemente
+  // Configuración de Gemini API Key en cliente
+  const [geminiApiKey, setGeminiApiKey] = useState<string>('');
+  const [showKeyModal, setShowKeyModal] = useState<boolean>(false);
+  const [tempKeyInput, setTempKeyInput] = useState<string>('');
+  const [aiWarning, setAiWarning] = useState<string | null>(null);
+
+  // Borrador de factura escaneada recientemente (100% editable)
   const [scannedDraft, setScannedDraft] = useState<{
     provider_name: string;
     ruc: string;
@@ -87,7 +98,7 @@ export default function IngestaPage() {
   const [manualProviderId, setManualProviderId] = useState('');
   const [manualInvoiceNum, setManualInvoiceNum] = useState('');
   const [manualTimbrado, setManualTimbrado] = useState('');
-  const [manualDate, setManualDate] = useState('2026-10-16');
+  const [manualDate, setManualDate] = useState(new Date().toISOString().split('T')[0]);
   const [manualCondition, setManualCondition] = useState<'contado' | 'credito'>('contado');
   const [manualDeclaredTotal, setManualDeclaredTotal] = useState<number>(0);
   const [manualItems, setManualItems] = useState<{
@@ -109,11 +120,23 @@ export default function IngestaPage() {
     if (provs.length > 0 && !manualProviderId) {
       setManualProviderId(provs[0].id);
     }
+
+    const savedKey = StorageService.getGeminiApiKey();
+    setGeminiApiKey(savedKey);
+    setTempKeyInput(savedKey);
   };
 
   useEffect(() => {
     loadData();
   }, []);
+
+  const handleSaveApiKey = () => {
+    StorageService.setGeminiApiKey(tempKeyInput);
+    setGeminiApiKey(tempKeyInput.trim());
+    setShowKeyModal(false);
+    setNotification(tempKeyInput.trim() ? '✅ Clave de Gemini guardada correctamente. Tu lector con IA ya está activo.' : 'Clave de Gemini removida.');
+    setTimeout(() => setNotification(null), 4000);
+  };
 
   // 1. DISPARADOR AL QUITAR FOTO
   const handlePhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -122,14 +145,18 @@ export default function IngestaPage() {
 
     setIsExtracting(true);
     setNotification(null);
+    setAiWarning(null);
     setScannedDraft(null);
 
     try {
       // Comprimir la imagen para rapidez
       const compressedBase64 = await compressImageFile(file);
 
-      // Llamar al endpoint de extracción inteligente
+      // Llamar al endpoint de extracción inteligente con la clave local (si existe)
       let extractedData: any = null;
+      let usedMethod = '';
+      let warningType = '';
+
       try {
         const res = await fetch('/api/invoices/extract', {
           method: 'POST',
@@ -137,6 +164,7 @@ export default function IngestaPage() {
           body: JSON.stringify({
             image: compressedBase64,
             fileName: file.name,
+            apiKey: StorageService.getGeminiApiKey() || undefined,
           }),
         });
 
@@ -144,25 +172,33 @@ export default function IngestaPage() {
           const json = await res.json();
           if (json.success && json.invoice) {
             extractedData = json.invoice;
+            usedMethod = json.method || '';
+            warningType = json.warning || '';
           }
         }
       } catch (err) {
         console.warn('Error en API de extracción:', err);
       }
 
-      // Estructura por defecto si no hubo respuesta del servidor
+      if (warningType === 'missing_api_key' || !StorageService.getGeminiApiKey()) {
+        setAiWarning('💡 Modo sin IA: Puedes escribir o corregir los materiales y precios directamente aquí abajo. Para que la IA los lea sola desde la foto, vincula tu clave gratuita de Google Gemini.');
+      } else if (usedMethod === 'gemini_vision_ai') {
+        setNotification('✨ ¡Factura y materiales extraídos con Inteligencia Artificial!');
+      }
+
+      // Estructura por defecto si no hubo respuesta o faltan datos
       if (!extractedData) {
         extractedData = {
-          provider_name: providers[0]?.name || 'Proveedor de Ferretería',
-          ruc: providers[0]?.ruc || '80000000-0',
-          invoice_number: `001-001-${Math.floor(1000000 + Math.random() * 9000000)}`,
-          timbrado: '18000000',
+          provider_name: providers[0]?.name || '',
+          ruc: providers[0]?.ruc || '',
+          invoice_number: '',
+          timbrado: '',
           issue_date: new Date().toISOString().split('T')[0],
           payment_condition: 'contado',
           total_pyg: 0,
           items: [
             {
-              raw_description: 'MATERIAL ELECTRICO SEGÚN TICKET',
+              raw_description: '',
               quantity: 1,
               unit: 'un',
               unit_cost_pyg: 0,
@@ -172,71 +208,150 @@ export default function IngestaPage() {
         };
       }
 
-      // Preparar el borrador para que el usuario confirme
+      const itemsList = (extractedData.items && extractedData.items.length > 0)
+        ? extractedData.items
+        : [{ raw_description: '', quantity: 1, unit: 'un', unit_cost_pyg: 0, total_pyg: 0 }];
+
+      // Preparar el borrador para que el usuario confirme y EDITE con libertad
       const draft = {
-        provider_name: extractedData.provider_name || 'Ferretería / Distribuidor',
-        ruc: extractedData.ruc || '80000000-0',
-        invoice_number: extractedData.invoice_number || `001-001-${Math.floor(1000000 + Math.random() * 9000000)}`,
-        timbrado: extractedData.timbrado || '18000000',
+        provider_name: extractedData.provider_name || '',
+        ruc: extractedData.ruc || '',
+        invoice_number: extractedData.invoice_number || '',
+        timbrado: extractedData.timbrado || '',
         issue_date: extractedData.issue_date || new Date().toISOString().split('T')[0],
         payment_condition: (extractedData.payment_condition as any) || 'contado',
         total_pyg: extractedData.total_pyg || 0,
-        items: (extractedData.items || []).map((it: any) => {
+        items: itemsList.map((it: any) => {
           const suggestions = StorageService.suggestForRawText(it.raw_description || '');
           const best = suggestions[0]?.product;
+          const qty = Number(it.quantity) || 1;
+          const cost = Number(it.unit_cost_pyg) || 0;
           return {
-            raw_description: it.raw_description || 'Material',
-            quantity: Number(it.quantity) || 1,
+            raw_description: it.raw_description || '',
+            quantity: qty,
             unit: it.unit || 'un',
-            unit_cost_pyg: Number(it.unit_cost_pyg) || 0,
-            total_pyg: Number(it.total_pyg) || ((Number(it.unit_cost_pyg) || 0) * (Number(it.quantity) || 1)),
+            unit_cost_pyg: cost,
+            total_pyg: Number(it.total_pyg) || (qty * cost),
             suggested_canonical_id: best?.id,
           };
         }),
       };
 
+      // Si el total es 0, recalcular de la suma de ítems
+      const sumItems = draft.items.reduce((acc: number, it: any) => acc + (it.total_pyg || 0), 0);
+      if (draft.total_pyg === 0 && sumItems > 0) {
+        draft.total_pyg = sumItems;
+      }
+
       setScannedDraft(draft);
     } catch (err: any) {
-      setNotification(`Error al leer imagen: ${err.message || 'Error'}`);
+      setNotification(`Error al procesar imagen: ${err.message || 'Error'}`);
     } finally {
       setIsExtracting(false);
       e.target.value = '';
     }
   };
 
+  // MANIPULACIÓN DEL BORRADOR ESCANEADO (EDICIÓN EN VIVO)
+  const handleUpdateDraftItem = (index: number, field: string, value: any) => {
+    if (!scannedDraft) return;
+    const newItems = [...scannedDraft.items];
+    const item = { ...newItems[index], [field]: value };
+
+    if (field === 'quantity' || field === 'unit_cost_pyg') {
+      const qty = Number(field === 'quantity' ? value : item.quantity) || 1;
+      const cost = Number(field === 'unit_cost_pyg' ? value : item.unit_cost_pyg) || 0;
+      item.total_pyg = qty * cost;
+    }
+
+    if (field === 'raw_description') {
+      const suggestions = StorageService.suggestForRawText(value || '');
+      item.suggested_canonical_id = suggestions[0]?.product?.id;
+    }
+
+    newItems[index] = item;
+    const newTotal = newItems.reduce((acc, it) => acc + (it.total_pyg || 0), 0);
+
+    setScannedDraft({
+      ...scannedDraft,
+      items: newItems,
+      total_pyg: newTotal,
+    });
+  };
+
+  const handleAddDraftItem = () => {
+    if (!scannedDraft) return;
+    setScannedDraft({
+      ...scannedDraft,
+      items: [
+        ...scannedDraft.items,
+        {
+          raw_description: '',
+          quantity: 1,
+          unit: 'un',
+          unit_cost_pyg: 0,
+          total_pyg: 0,
+        },
+      ],
+    });
+  };
+
+  const handleRemoveDraftItem = (index: number) => {
+    if (!scannedDraft) return;
+    const newItems = scannedDraft.items.filter((_, idx) => idx !== index);
+    const finalItems = newItems.length > 0 ? newItems : [
+      { raw_description: '', quantity: 1, unit: 'un', unit_cost_pyg: 0, total_pyg: 0 }
+    ];
+    const newTotal = finalItems.reduce((acc, it) => acc + (it.total_pyg || 0), 0);
+    setScannedDraft({
+      ...scannedDraft,
+      items: finalItems,
+      total_pyg: newTotal,
+    });
+  };
+
   // 2. CONFIRMAR Y GUARDAR FACTURA EXTRAÍDA POR FOTO
   const handleConfirmScannedDraft = async () => {
     if (!scannedDraft) return;
 
+    const finalInvoiceNumber = scannedDraft.invoice_number.trim() || `001-001-${Math.floor(1000000 + Math.random() * 9000000)}`;
+    const finalProviderName = scannedDraft.provider_name.trim() || 'Ferretería / Proveedor Local';
+
     const matchedProvider = providers.find(p => 
-      p.name.toLowerCase().includes(scannedDraft.provider_name.toLowerCase()) ||
+      p.name.toLowerCase().includes(finalProviderName.toLowerCase()) ||
       (p.ruc && p.ruc === scannedDraft.ruc)
     ) || providers[0];
+
+    const validItems = scannedDraft.items.filter(it => it.raw_description.trim().length > 0);
+    const itemsToSave = validItems.length > 0 ? validItems : scannedDraft.items;
+
+    const calculatedTotal = itemsToSave.reduce((acc, it) => acc + (it.total_pyg || 0), 0);
+    const finalTotal = scannedDraft.total_pyg > 0 ? scannedDraft.total_pyg : calculatedTotal;
 
     const newInvoice: IngestedInvoice = {
       id: `inv-custom-${Date.now()}`,
       provider_id: matchedProvider?.id || 'prov-custom',
-      provider_name: scannedDraft.provider_name,
-      invoice_number: scannedDraft.invoice_number,
-      timbrado: scannedDraft.timbrado,
-      ruc: scannedDraft.ruc,
+      provider_name: finalProviderName,
+      invoice_number: finalInvoiceNumber,
+      timbrado: scannedDraft.timbrado.trim() || '18000000',
+      ruc: scannedDraft.ruc.trim() || matchedProvider?.ruc || '80000000-0',
       issue_date: scannedDraft.issue_date,
       payment_condition: scannedDraft.payment_condition,
-      subtotal_pyg: scannedDraft.total_pyg,
-      iva_10_pyg: Math.round(scannedDraft.total_pyg / 11),
-      total_pyg: scannedDraft.total_pyg,
+      subtotal_pyg: finalTotal,
+      iva_10_pyg: Math.round(finalTotal / 11),
+      total_pyg: finalTotal,
       file_url: '', // Cero fotos pesadas: 100% datos estructurados
-      file_name: `Factura ${scannedDraft.invoice_number}`,
+      file_name: `Factura ${finalInvoiceNumber}`,
       status: 'approved',
       created_at: new Date().toISOString(),
-      items: scannedDraft.items.map((it, idx) => ({
+      items: itemsToSave.map((it, idx) => ({
         id: `item-${Date.now()}-${idx}`,
-        raw_description: it.raw_description,
-        quantity: it.quantity,
-        unit: it.unit,
-        unit_cost_pyg: it.unit_cost_pyg,
+        raw_description: it.raw_description.trim() || 'Material Eléctrico',
+        quantity: it.quantity || 1,
+        unit: it.unit || 'un',
+        unit_cost_pyg: it.unit_cost_pyg || 0,
         iva_rate: 10,
-        total_pyg: it.total_pyg,
+        total_pyg: it.total_pyg || 0,
         suggested_canonical_id: it.suggested_canonical_id,
         is_confirmed: true,
       })),
@@ -245,7 +360,7 @@ export default function IngestaPage() {
     // Guardar en Storage Local
     StorageService.saveInvoice(newInvoice);
 
-    // Guardar precios en el catálogo
+    // Guardar precios en el catálogo maestro
     newInvoice.items.forEach(it => {
       if (it.suggested_canonical_id && it.unit_cost_pyg > 0) {
         StorageService.recordPrice(it.suggested_canonical_id, {
@@ -272,8 +387,9 @@ export default function IngestaPage() {
       console.warn('Sincronización en segundo plano con Neon:', e);
     }
 
-    setNotification(`✅ Factura de ${newInvoice.provider_name} guardada exitosamente.`);
+    setNotification(`✅ Factura ${newInvoice.invoice_number} de ${newInvoice.provider_name} guardada exitosamente.`);
     setScannedDraft(null);
+    setAiWarning(null);
     loadData();
     setTimeout(() => setNotification(null), 4000);
   };
@@ -321,17 +437,18 @@ export default function IngestaPage() {
 
     StorageService.saveInvoice(newInvoice);
 
-    manualItems.forEach(it => {
-      if (it.canonical_id && it.unit_cost_pyg > 0) {
-        StorageService.recordPrice(it.canonical_id, {
-          canonical_product_id: it.canonical_id,
-          provider_id: prov.id,
-          provider_name: prov.name,
+    // Actualizar catálogo
+    newInvoice.items.forEach(it => {
+      if (it.suggested_canonical_id && it.unit_cost_pyg > 0) {
+        StorageService.recordPrice(it.suggested_canonical_id, {
+          canonical_product_id: it.suggested_canonical_id,
+          provider_id: newInvoice.provider_id,
+          provider_name: newInvoice.provider_name,
           price_pyg: it.unit_cost_pyg,
-          date: manualDate,
+          date: newInvoice.issue_date,
           source_type: 'manual',
           source_ref: `Factura ${newInvoice.invoice_number}`,
-          notes: 'Carga manual en obra',
+          notes: 'Carga manual',
         });
       }
     });
@@ -346,51 +463,44 @@ export default function IngestaPage() {
       console.warn('Sincronización en segundo plano con Neon:', e);
     }
 
-    setNotification(`✅ Factura de ${prov.name} guardada exitosamente.`);
+    setNotification(`✅ Factura ${newInvoice.invoice_number} guardada exitosamente.`);
     setManualInvoiceNum('');
-    setManualDeclaredTotal(0);
     setManualItems([{ raw_description: '', quantity: 1, unit: 'un', unit_cost_pyg: 0 }]);
+    setManualDeclaredTotal(0);
     loadData();
     setTimeout(() => setNotification(null), 4000);
   };
 
   return (
-    <div className="max-w-lg mx-auto px-4 py-4 space-y-4 pb-24">
+    <div className="max-w-md sm:max-w-2xl lg:max-w-3xl mx-auto px-3.5 sm:px-6 py-4 sm:py-6 space-y-4">
       
-      {/* PANTALLA DE PROCESAMIENTO / CARGA */}
-      {isExtracting && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center space-y-4 animate-in fade-in">
-          <div className="w-16 h-16 rounded-3xl bg-amber-400 text-slate-950 flex items-center justify-center shadow-2xl shadow-amber-400/40 animate-pulse">
-            <Camera className="w-8 h-8" />
+      {/* CABECERA MÓVIL DIRECTA */}
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="inline-flex items-center space-x-1.5 text-[10px] font-black text-amber-400 uppercase tracking-wider bg-amber-500/10 px-2.5 py-0.5 rounded-full border border-amber-500/20">
+            <Sparkles className="w-3 h-3" />
+            <span>Ingreso de Facturas</span>
           </div>
-          <div className="space-y-1">
-            <h3 className="text-base font-black text-white">Leyendo Comprobante...</h3>
-            <p className="text-xs text-slate-400">
-              Extrayendo proveedor, ítems y precios de la imagen.
-            </p>
-          </div>
-          <div className="flex items-center space-x-2 text-xs font-mono text-amber-400 bg-amber-400/10 px-3 py-1.5 rounded-full border border-amber-400/20">
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            <span>Extrayendo datos...</span>
-          </div>
+          <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight mt-1">
+            Cargar Factura de Compra
+          </h1>
         </div>
-      )}
 
-      {/* ENCABEZADO SIMPLE Y DIRECTO */}
-      <div className="space-y-1 text-center sm:text-left">
-        <div className="inline-flex items-center space-x-1.5 text-[10px] font-black text-amber-400 uppercase tracking-wider bg-amber-500/10 px-2.5 py-0.5 rounded-full border border-amber-500/20">
-          <Sparkles className="w-3 h-3" />
-          <span>Ingreso de Facturas</span>
-        </div>
-        <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
-          Cargar Factura de Compra
-        </h1>
-        <p className="text-slate-400 text-xs">
-          Elige si quieres quitarle una foto o cargar los datos manualmente.
-        </p>
+        {/* BOTÓN RÁPIDO PARA IA / GEMINI */}
+        <button
+          onClick={() => setShowKeyModal(true)}
+          className={`flex items-center space-x-1 px-3 py-1.5 rounded-xl text-[11px] font-bold border transition-all ${
+            geminiApiKey 
+              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20' 
+              : 'bg-amber-400/10 border-amber-400/30 text-amber-400 hover:bg-amber-400/20'
+          }`}
+        >
+          <Key className="w-3.5 h-3.5" />
+          <span>{geminiApiKey ? 'IA Activa' : 'Activar IA Gratis'}</span>
+        </button>
       </div>
 
-      {/* NOTIFICACIÓN */}
+      {/* NOTIFICACIÓN ÉXITO */}
       {notification && (
         <div className="p-3.5 rounded-2xl bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center space-x-2 animate-in fade-in">
           <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
@@ -404,6 +514,7 @@ export default function IngestaPage() {
           onClick={() => {
             setActiveTab('photo');
             setScannedDraft(null);
+            setAiWarning(null);
           }}
           className={`flex items-center justify-center space-x-2 py-2.5 rounded-xl text-xs font-black transition-all ${
             activeTab === 'photo'
@@ -419,6 +530,7 @@ export default function IngestaPage() {
           onClick={() => {
             setActiveTab('manual');
             setScannedDraft(null);
+            setAiWarning(null);
           }}
           className={`flex items-center justify-center space-x-2 py-2.5 rounded-xl text-xs font-black transition-all ${
             activeTab === 'manual'
@@ -444,39 +556,74 @@ export default function IngestaPage() {
                 capture="environment"
                 onChange={handlePhotoCapture}
                 className="hidden"
+                disabled={isExtracting}
               />
               <div className="bg-[#0F1E33] hover:bg-[#132742] border-2 border-dashed border-amber-400/40 hover:border-amber-400 rounded-3xl p-8 text-center space-y-4 shadow-xl">
-                <div className="w-16 h-16 rounded-3xl bg-amber-400 text-slate-950 flex items-center justify-center mx-auto shadow-lg shadow-amber-400/30">
-                  <Camera className="w-8 h-8" />
-                </div>
-                <div className="space-y-1">
-                  <h3 className="text-base font-black text-white">
-                    Tocar para Quitar Foto a la Factura
-                  </h3>
-                  <p className="text-xs text-slate-400 max-w-xs mx-auto">
-                    Abre la cámara del celular. El sistema leerá el proveedor, total e ítems automáticamente.
-                  </p>
-                </div>
-                <div className="inline-flex items-center space-x-2 bg-slate-900 border border-slate-800 text-amber-400 text-[11px] font-bold px-4 py-1.5 rounded-xl">
-                  <span>📸 Quitar foto o subir ticket</span>
-                </div>
+                {isExtracting ? (
+                  <div className="py-6 space-y-3">
+                    <Loader2 className="w-12 h-12 text-amber-400 animate-spin mx-auto" />
+                    <p className="text-sm font-bold text-white">Leyendo ticket con Visión Inteligente...</p>
+                    <p className="text-xs text-slate-400">Extrayendo proveedor, timbrado, materiales y precios...</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="w-16 h-16 rounded-3xl bg-amber-400 text-slate-950 flex items-center justify-center mx-auto shadow-lg shadow-amber-400/30">
+                      <Camera className="w-8 h-8" />
+                    </div>
+                    <div className="space-y-1">
+                      <h3 className="text-base font-black text-white">
+                        Tocar para Quitar Foto a la Factura
+                      </h3>
+                      <p className="text-xs text-slate-400 max-w-xs mx-auto">
+                        Abre la cámara del celular. El sistema leerá el proveedor, total e ítems automáticamente.
+                      </p>
+                    </div>
+                    <div className="inline-flex items-center space-x-2 bg-slate-900 border border-slate-800 text-amber-400 text-[11px] font-bold px-4 py-1.5 rounded-xl">
+                      <span>📸 Quitar foto o seleccionar imagen</span>
+                    </div>
+                  </>
+                )}
               </div>
             </label>
           ) : (
-            /* SI YA ESCANEÓ: VISTA LIMPIA DE CONFIRMACIÓN CON LOS DATOS EXTRAÍDOS */
+            /* SI YA ESCANEÓ: VISTA EDITABLE Y FÁCIL PARA CONFIRMAR ANTES DE GUARDAR */
             <div className="bg-[#0F1E33] border border-slate-800 rounded-3xl p-5 shadow-xl space-y-4 animate-in fade-in">
+              
+              {/* ALERTA INFORMATIVA SI NO HAY IA VINCULADA */}
+              {aiWarning && (
+                <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs flex items-start space-x-2">
+                  <HelpCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <div className="space-y-1 flex-1">
+                    <span>{aiWarning}</span>
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => setShowKeyModal(true)}
+                        className="text-amber-400 underline font-bold text-[11px] hover:text-white"
+                      >
+                        🔑 Vincular clave gratuita de Google Gemini aquí
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ENCABEZADO DE DATOS BÁSICOS EDITABLES */}
               <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
                 <div>
                   <span className="text-[10px] font-black uppercase text-amber-400 tracking-wider">
-                    Datos Detectados
+                    Datos de la Factura
                   </span>
-                  <h3 className="text-base font-black text-white flex items-center space-x-1.5">
-                    <Building2 className="w-4 h-4 text-amber-400" />
-                    <span>{scannedDraft.provider_name}</span>
-                  </h3>
+                  <input
+                    type="text"
+                    value={scannedDraft.provider_name}
+                    onChange={(e) => setScannedDraft({ ...scannedDraft, provider_name: e.target.value })}
+                    placeholder="Proveedor / Ferretería"
+                    className="bg-[#070D18] border border-slate-800 rounded-xl px-3 py-1.5 text-white font-bold text-xs mt-1 w-full focus:border-amber-400 focus:outline-none"
+                  />
                 </div>
 
-                <div className="text-right">
+                <div className="text-right pl-3">
                   <span className="text-[10px] text-slate-400 font-bold block">Total Factura</span>
                   <span className="text-base font-black text-amber-400">
                     {formatPYG(scannedDraft.total_pyg)}
@@ -484,38 +631,96 @@ export default function IngestaPage() {
                 </div>
               </div>
 
-              {/* DETALLES BÁSICOS */}
+              {/* DETALLES DE COMPROBANTE */}
               <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="bg-[#070D18] p-2.5 rounded-xl border border-slate-800">
-                  <span className="text-[9px] font-bold text-slate-400 uppercase block">Factura Nº:</span>
-                  <span className="font-mono font-bold text-white text-xs">{scannedDraft.invoice_number}</span>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Factura Nº</label>
+                  <input
+                    type="text"
+                    value={scannedDraft.invoice_number}
+                    onChange={(e) => setScannedDraft({ ...scannedDraft, invoice_number: e.target.value })}
+                    placeholder="001-001-0012345"
+                    className="w-full bg-[#070D18] border border-slate-800 rounded-xl px-3 py-2 text-white font-mono text-xs focus:border-amber-400 focus:outline-none"
+                  />
                 </div>
-                <div className="bg-[#070D18] p-2.5 rounded-xl border border-slate-800">
-                  <span className="text-[9px] font-bold text-slate-400 uppercase block">Fecha:</span>
-                  <span className="font-bold text-white text-xs">{formatDatePY(scannedDraft.issue_date)}</span>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Fecha</label>
+                  <input
+                    type="date"
+                    value={scannedDraft.issue_date}
+                    onChange={(e) => setScannedDraft({ ...scannedDraft, issue_date: e.target.value })}
+                    className="w-full bg-[#070D18] border border-slate-800 rounded-xl px-3 py-2 text-white text-xs focus:border-amber-400 focus:outline-none"
+                  />
                 </div>
               </div>
 
-              {/* LÍNEAS DE MATERIALES EXTRAÍDAS */}
-              <div className="space-y-2">
-                <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">
-                  Materiales Extraídos ({scannedDraft.items.length}):
-                </span>
+              {/* LÍNEAS DE MATERIALES (100% EDITABLES) */}
+              <div className="space-y-2 pt-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                    Materiales ({scannedDraft.items.length}):
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleAddDraftItem}
+                    className="text-amber-400 hover:text-amber-300 text-[11px] font-bold flex items-center space-x-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Agregar Material</span>
+                  </button>
+                </div>
 
-                <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                   {scannedDraft.items.map((it, idx) => (
-                    <div key={idx} className="bg-[#070D18] border border-slate-800 p-2.5 rounded-xl flex items-center justify-between text-xs">
-                      <div className="min-w-0 flex-1 mr-2">
-                        <span className="font-bold text-white block truncate text-[11px]">
-                          {it.raw_description}
-                        </span>
-                        <span className="text-[10px] text-slate-400">
-                          {it.quantity} {it.unit} x {formatPYG(it.unit_cost_pyg)}
-                        </span>
+                    <div key={idx} className="bg-[#070D18] border border-slate-800 p-2.5 rounded-2xl space-y-2">
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="text"
+                          value={it.raw_description}
+                          onChange={(e) => handleUpdateDraftItem(idx, 'raw_description', e.target.value)}
+                          placeholder="Descripción del material (ej: Cable 2.0 mm2, Llave 20A...)"
+                          className="flex-1 bg-[#0F1E33] border border-slate-800 rounded-xl px-3 py-1.5 text-white font-bold text-xs focus:border-amber-400 focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveDraftItem(idx)}
+                          className="p-1.5 text-slate-500 hover:text-red-400 rounded-lg hover:bg-red-500/10 transition-all"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
-                      <span className="font-black text-amber-400 text-xs shrink-0">
-                        {formatPYG(it.total_pyg)}
-                      </span>
+
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <label className="text-[9px] font-bold text-slate-400 block mb-0.5">Cant.</label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={it.quantity}
+                            onChange={(e) => handleUpdateDraftItem(idx, 'quantity', Number(e.target.value))}
+                            className="w-full bg-[#0F1E33] border border-slate-800 rounded-xl px-2 py-1 text-white text-xs text-center focus:border-amber-400 focus:outline-none"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-[9px] font-bold text-slate-400 block mb-0.5">Precio Unit. (₲)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="100"
+                            value={it.unit_cost_pyg}
+                            onChange={(e) => handleUpdateDraftItem(idx, 'unit_cost_pyg', Number(e.target.value))}
+                            className="w-full bg-[#0F1E33] border border-slate-800 rounded-xl px-2 py-1 text-amber-400 font-bold text-xs text-right focus:border-amber-400 focus:outline-none"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-[9px] font-bold text-slate-400 block mb-0.5">Subtotal (₲)</label>
+                          <div className="h-7 bg-[#0F1E33] border border-slate-800 rounded-xl px-2 flex items-center justify-end text-white font-black text-xs">
+                            {formatPYG(it.total_pyg)}
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -534,7 +739,10 @@ export default function IngestaPage() {
 
                 <button
                   type="button"
-                  onClick={() => setScannedDraft(null)}
+                  onClick={() => {
+                    setScannedDraft(null);
+                    setAiWarning(null);
+                  }}
                   className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center space-x-1"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
@@ -559,88 +767,74 @@ export default function IngestaPage() {
 
           <div className="space-y-3">
             <div>
-              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Proveedor / Ferretería:</label>
+              <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Proveedor / Ferretería</label>
               <select
                 value={manualProviderId}
                 onChange={(e) => setManualProviderId(e.target.value)}
-                className="w-full px-3 py-2 bg-[#070D18] border border-slate-800 rounded-xl text-xs font-bold text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+                className="w-full bg-[#070D18] border border-slate-800 rounded-xl px-3 py-2 text-white text-xs focus:border-amber-400 focus:outline-none"
               >
-                {providers.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} ({p.city})
-                  </option>
+                {providers.map(p => (
+                  <option key={p.id} value={p.id}>{p.name} ({p.city})</option>
                 ))}
               </select>
             </div>
 
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Nº de Factura:</label>
+                <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Nº Comprobante</label>
                 <input
                   type="text"
                   required
+                  placeholder="001-001-0012345"
                   value={manualInvoiceNum}
                   onChange={(e) => setManualInvoiceNum(e.target.value)}
-                  placeholder="001-001-XXXXXXX"
-                  className="w-full px-3 py-2 bg-[#070D18] border border-slate-800 rounded-xl text-xs font-bold text-white focus:outline-none focus:ring-2 focus:ring-amber-400 font-mono"
+                  className="w-full bg-[#070D18] border border-slate-800 rounded-xl px-3 py-2 text-white font-mono text-xs focus:border-amber-400 focus:outline-none"
                 />
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Fecha:</label>
+                <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Fecha</label>
                 <input
                   type="date"
                   value={manualDate}
                   onChange={(e) => setManualDate(e.target.value)}
-                  className="w-full px-3 py-2 bg-[#070D18] border border-slate-800 rounded-xl text-xs font-bold text-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  className="w-full bg-[#070D18] border border-slate-800 rounded-xl px-3 py-2 text-white text-xs focus:border-amber-400 focus:outline-none"
                 />
               </div>
             </div>
 
-            <div>
-              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Total del Ticket (₲):</label>
-              <input
-                type="number"
-                value={manualDeclaredTotal || ''}
-                onChange={(e) => setManualDeclaredTotal(parseInt(e.target.value) || 0)}
-                placeholder="Ej: 338500"
-                className="w-full px-3 py-2 bg-[#070D18] border border-slate-800 rounded-xl text-xs font-black text-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400"
-              />
-            </div>
-
-            {/* DETALLE DE MATERIALES */}
+            {/* ÍTEMS MANUALES */}
             <div className="space-y-2 pt-1">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold text-slate-400 uppercase">Materiales:</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase">Materiales</span>
                 <button
                   type="button"
                   onClick={() => setManualItems([...manualItems, { raw_description: '', quantity: 1, unit: 'un', unit_cost_pyg: 0 }])}
-                  className="text-xs font-bold text-amber-400 hover:text-amber-300"
+                  className="text-amber-400 text-xs font-bold hover:underline"
                 >
-                  + Agregar línea
+                  + Agregar Ítem
                 </button>
               </div>
 
               {manualItems.map((item, idx) => (
-                <div key={idx} className="p-2.5 bg-[#070D18] border border-slate-800 rounded-xl space-y-2">
+                <div key={idx} className="bg-[#070D18] border border-slate-800 p-2.5 rounded-xl space-y-2">
                   <div className="flex items-center space-x-2">
                     <input
                       type="text"
-                      required
+                      placeholder="Descripción del material"
                       value={item.raw_description}
                       onChange={(e) => {
-                        const updated = [...manualItems];
-                        updated[idx].raw_description = e.target.value;
-                        setManualItems(updated);
+                        const next = [...manualItems];
+                        next[idx].raw_description = e.target.value;
+                        setManualItems(next);
                       }}
-                      placeholder="Descripción del material..."
-                      className="flex-1 px-2.5 py-1.5 bg-[#0F1E33] border border-slate-800 rounded-lg text-xs text-white placeholder-slate-600 focus:outline-none focus:border-amber-400"
+                      className="flex-1 bg-[#0F1E33] border border-slate-800 rounded-lg px-2.5 py-1.5 text-white text-xs focus:border-amber-400 focus:outline-none"
                     />
                     {manualItems.length > 1 && (
                       <button
                         type="button"
                         onClick={() => setManualItems(manualItems.filter((_, i) => i !== idx))}
-                        className="text-slate-500 hover:text-red-400 p-1"
+                        className="text-slate-500 hover:text-red-400"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -650,28 +844,29 @@ export default function IngestaPage() {
                   <div className="grid grid-cols-2 gap-2">
                     <input
                       type="number"
-                      min="0.1"
-                      step="any"
+                      min="1"
+                      placeholder="Cant."
                       value={item.quantity}
                       onChange={(e) => {
-                        const updated = [...manualItems];
-                        updated[idx].quantity = parseFloat(e.target.value) || 1;
-                        setManualItems(updated);
+                        const next = [...manualItems];
+                        next[idx].quantity = Number(e.target.value);
+                        setManualItems(next);
                       }}
-                      placeholder="Cantidad"
-                      className="px-2 py-1.5 bg-[#0F1E33] border border-slate-800 rounded-lg text-xs font-bold text-center text-white focus:outline-none focus:border-amber-400"
+                      className="bg-[#0F1E33] border border-slate-800 rounded-lg px-2.5 py-1.5 text-white text-xs focus:border-amber-400 focus:outline-none"
                     />
+
                     <input
                       type="number"
-                      required
+                      min="0"
+                      step="500"
+                      placeholder="Precio Unitario (₲)"
                       value={item.unit_cost_pyg || ''}
                       onChange={(e) => {
-                        const updated = [...manualItems];
-                        updated[idx].unit_cost_pyg = parseInt(e.target.value) || 0;
-                        setManualItems(updated);
+                        const next = [...manualItems];
+                        next[idx].unit_cost_pyg = Number(e.target.value);
+                        setManualItems(next);
                       }}
-                      placeholder="Precio Unitario"
-                      className="px-2.5 py-1.5 bg-[#0F1E33] border border-slate-800 rounded-lg text-xs font-bold text-amber-400 focus:outline-none focus:border-amber-400"
+                      className="bg-[#0F1E33] border border-slate-800 rounded-lg px-2.5 py-1.5 text-white text-xs focus:border-amber-400 focus:outline-none text-right font-mono"
                     />
                   </div>
                 </div>
@@ -689,38 +884,35 @@ export default function IngestaPage() {
         </form>
       )}
 
-      {/* SECCIÓN COLAPSABLE AL FINAL: VER HISTORIAL DE FACTURAS (SOLO SI LO DESEA) */}
+      {/* HISTORIAL PLEGABLE (NO ESTORBA) */}
       <div className="pt-2">
         <button
-          type="button"
           onClick={() => setShowHistory(!showHistory)}
-          className="w-full py-2.5 px-3 bg-[#0F1E33] hover:bg-slate-900 border border-slate-800 rounded-2xl flex items-center justify-between text-xs font-bold text-slate-400 hover:text-white transition-all"
+          className="w-full flex items-center justify-between p-3 rounded-2xl bg-[#0F1E33] border border-slate-800 text-xs font-bold text-slate-300 hover:text-white transition-all"
         >
-          <span>Facturas guardadas anteriormente ({invoices.length})</span>
+          <div className="flex items-center space-x-2">
+            <Building2 className="w-4 h-4 text-amber-400" />
+            <span>Facturas guardadas anteriormente ({invoices.length})</span>
+          </div>
           {showHistory ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
         </button>
 
         {showHistory && (
-          <div className="mt-2 space-y-2 animate-in fade-in">
+          <div className="mt-2 space-y-2 max-h-60 overflow-y-auto pr-1 animate-in fade-in">
             {invoices.map((inv) => (
-              <div
-                key={inv.id}
-                className="bg-[#0F1E33] border border-slate-800 rounded-2xl p-3 flex items-center justify-between text-xs"
-              >
-                <div>
-                  <span className="font-bold text-white block truncate max-w-[200px]">
-                    {inv.provider_name}
-                  </span>
-                  <span className="text-[10px] text-slate-400 font-mono">
+              <div key={inv.id} className="bg-[#0F1E33] border border-slate-800/80 p-3 rounded-2xl flex items-center justify-between text-xs">
+                <div className="min-w-0 flex-1 mr-2">
+                  <span className="font-black text-white block truncate">{inv.provider_name}</span>
+                  <span className="text-[10px] text-slate-400 block font-mono">
                     Nº {inv.invoice_number} • {formatDatePY(inv.issue_date)}
                   </span>
                 </div>
-                <div className="text-right">
-                  <span className="font-black text-amber-400 block">
+                <div className="text-right shrink-0">
+                  <span className="font-black text-amber-400 block text-xs">
                     {formatPYG(inv.total_pyg)}
                   </span>
-                  <span className="text-[9px] text-emerald-400 font-bold uppercase">
-                    Guardado ✓
+                  <span className="text-[9px] text-slate-400 block">
+                    {inv.items.length} materiales
                   </span>
                 </div>
               </div>
@@ -728,6 +920,77 @@ export default function IngestaPage() {
           </div>
         )}
       </div>
+
+      {/* MODAL CONFIGURACIÓN GEMINI API KEY */}
+      {showKeyModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-[#0F1E33] border border-slate-800 rounded-3xl max-w-sm w-full p-5 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center space-x-2">
+                <Key className="w-4 h-4 text-amber-400" />
+                <h3 className="text-sm font-black text-white">Lector Inteligente con IA</h3>
+              </div>
+              <button 
+                onClick={() => setShowKeyModal(false)}
+                className="text-slate-400 hover:text-white p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <p className="text-slate-300 leading-relaxed">
+                Para que la cámara lea automáticamente los nombres de materiales, cantidades y precios en guaraníes, ingresa tu clave gratuita de <strong className="text-amber-400">Google Gemini API</strong>:
+              </p>
+
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">
+                  Gemini API Key
+                </label>
+                <input
+                  type="password"
+                  placeholder="AIzaSy..."
+                  value={tempKeyInput}
+                  onChange={(e) => setTempKeyInput(e.target.value)}
+                  className="w-full bg-[#070D18] border border-slate-800 rounded-xl px-3 py-2 text-white font-mono text-xs focus:border-amber-400 focus:outline-none"
+                />
+              </div>
+
+              <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-[11px] text-slate-400 space-y-1">
+                <div className="flex items-center space-x-1 text-amber-400 font-bold">
+                  <ExternalLink className="w-3 h-3" />
+                  <a 
+                    href="https://aistudio.google.com/app/apikey" 
+                    target="_blank" 
+                    rel="noreferrer"
+                    className="hover:underline"
+                  >
+                    Obtener clave gratis en Google AI Studio ↗
+                  </a>
+                </div>
+                <p>Es 100% gratuita con cualquier cuenta de Google.</p>
+              </div>
+
+              <div className="flex items-center space-x-2 pt-2">
+                <button
+                  type="button"
+                  onClick={handleSaveApiKey}
+                  className="flex-1 py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black rounded-xl text-xs transition-all"
+                >
+                  Guardar Clave
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowKeyModal(false)}
+                  className="py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-slate-400 font-bold rounded-xl text-xs transition-all"
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
