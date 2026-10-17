@@ -57,8 +57,8 @@ function setLocal<T>(key: string, data: T): void {
 
 export const StorageService = {
   // --- AUTH & USUARIOS ---
-  getCurrentUser(): UserProfile {
-    return getLocal(STORAGE_KEYS.USER, INITIAL_USER);
+  getCurrentUser(): UserProfile | null {
+    return getLocal<UserProfile | null>(STORAGE_KEYS.USER, null);
   },
   setCurrentUser(user: UserProfile): void {
     setLocal(STORAGE_KEYS.USER, user);
@@ -66,6 +66,9 @@ export const StorageService = {
   logout(): void {
     if (typeof window === 'undefined') return;
     localStorage.removeItem(STORAGE_KEYS.USER);
+  },
+  isAuthenticated(): boolean {
+    return Boolean(this.getCurrentUser());
   },
   getUsers(): UserProfile[] {
     return DEMO_USERS;
@@ -281,6 +284,9 @@ export const StorageService = {
       current.unshift(budget);
     }
     setLocal(STORAGE_KEYS.BUDGETS, current);
+  },
+  updateBudget(budget: Budget): void {
+    this.saveBudget(budget);
   },
   deleteBudget(id: string): void {
     const filtered = this.getBudgets().filter(b => b.id !== id);

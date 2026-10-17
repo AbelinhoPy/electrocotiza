@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { 
   FileText, 
-  PlusCircle, 
+  Plus, 
   Download, 
   Copy, 
   Trash2, 
@@ -14,7 +14,8 @@ import {
   User, 
   CheckCircle2, 
   Clock,
-  MessageSquare
+  Share2,
+  ArrowRight
 } from 'lucide-react';
 import { StorageService } from '@/lib/data/storage';
 import { Budget } from '@/lib/types';
@@ -62,10 +63,10 @@ export default function PresupuestosPage() {
 
   const handleShareWhatsApp = (b: Budget) => {
     const phone = b.client.phone ? b.client.phone.replace(/[^0-9]/g, '') : '';
-    const text = `*PRESUPUESTO ELÉCTRICO ${b.budget_number}*\n` +
-      `*De:* Construlogica Emprendimientos S.A. (Ing. Abel K.)\n` +
-      `*Para:* ${b.client.name}\n` +
-      `*Trabajo:* ${b.title}\n\n` +
+    const text = `*PRESUPUESTO ELÉCTRICO ${b.budget_number}* ⚡\n` +
+      `*De:* Construlogica Emprendimientos S.A.\n` +
+      `*Cliente:* ${b.client.name}\n` +
+      `*Obra / Trabajo:* ${b.title}\n\n` +
       `💰 *Total Presupuesto:* ${formatPYG(b.total_sale_pyg)} (IVA 10% incluido)\n` +
       `⏱️ *Validez:* ${b.validity_days} días\n` +
       `📦 *Entrega:* ${b.delivery_terms}\n` +
@@ -90,30 +91,31 @@ export default function PresupuestosPage() {
   });
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+    <div className="max-w-md sm:max-w-2xl lg:max-w-5xl mx-auto px-3.5 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
       
-      {/* ENCABEZADO */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      {/* ENCABEZADO MÓVIL */}
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-            Presupuestos y Cotizaciones
+          <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center space-x-2">
+            <FileText className="w-5 h-5 text-amber-400" />
+            <span>Presupuestos</span>
           </h1>
-          <p className="text-slate-500 text-sm mt-1">
-            Gestiona, duplica y descarga los presupuestos ejecutivos en PDF para tus clientes o en Excel para auditoría.
+          <p className="text-xs text-slate-400 mt-0.5">
+            Cotizaciones oficiales para clientes y WhatsApp
           </p>
         </div>
 
         <Link
           href="/presupuestos/nuevo"
-          className="inline-flex items-center space-x-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-bold px-4 py-2.5 rounded-xl text-sm shadow-md transition-all self-start sm:self-auto"
+          className="inline-flex items-center space-x-1.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 active:scale-95 text-slate-950 font-black px-3.5 py-2 rounded-2xl text-xs shadow-md shadow-amber-500/20 transition-all"
         >
-          <PlusCircle className="w-4 h-4" />
-          <span>Nuevo Presupuesto</span>
+          <Plus className="w-4 h-4 stroke-[3]" />
+          <span>+ Nuevo</span>
         </Link>
       </div>
 
-      {/* FILTROS DE ESTADO */}
-      <div className="flex items-center space-x-2 overflow-x-auto pb-2 scrollbar-none">
+      {/* FILTROS DE ESTADO MÓVIL HORIZONTALES */}
+      <div className="flex items-center space-x-2 overflow-x-auto pb-1 scrollbar-none">
         {[
           { key: 'all', label: 'Todos' },
           { key: 'draft', label: 'Borradores' },
@@ -123,10 +125,10 @@ export default function PresupuestosPage() {
           <button
             key={tab.key}
             onClick={() => setFilterStatus(tab.key)}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-colors ${
+            className={`px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all active:scale-95 ${
               filterStatus === tab.key
-                ? 'bg-slate-900 text-white'
-                : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
+                ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/20'
+                : 'bg-[#0F1E33] border border-slate-800 text-slate-400 hover:text-white'
             }`}
           >
             {tab.label}
@@ -134,118 +136,101 @@ export default function PresupuestosPage() {
         ))}
       </div>
 
-      {/* LISTADO DE PRESUPUESTOS */}
+      {/* LISTADO DE TARJETAS MÓVILES */}
       <div className="space-y-3">
-        {filteredBudgets.map((b) => (
-          <div
-            key={b.id}
-            className="bg-white rounded-2xl border border-slate-200/90 shadow-sm hover:shadow-md transition-all p-5 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4"
-          >
-            {/* Info Principal */}
-            <div className="space-y-2 min-w-0 flex-1">
-              <div className="flex items-center space-x-2.5">
-                <span className="font-mono font-bold text-xs bg-slate-100 text-slate-800 px-2.5 py-1 rounded-lg border border-slate-200">
-                  {b.budget_number}
-                </span>
-                <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-md ${
-                  b.status === 'accepted' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+        {filteredBudgets.length === 0 ? (
+          <div className="bg-[#0F1E33] border border-slate-800 rounded-3xl p-8 text-center space-y-2">
+            <p className="text-xs text-slate-400">No se encontraron presupuestos en esta categoría.</p>
+          </div>
+        ) : (
+          filteredBudgets.map((b) => (
+            <div
+              key={b.id}
+              className="bg-[#0F1E33] border border-slate-800 rounded-3xl p-4 shadow-xl space-y-3 hover:border-slate-700 transition-all"
+            >
+              {/* TOP: NÚMERO Y ESTADO */}
+              <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center space-x-2">
+                  <span className="px-2 py-0.5 rounded-md bg-amber-400/20 text-amber-300 font-mono font-bold text-[10px] border border-amber-400/30">
+                    {b.budget_number}
+                  </span>
+                  <span className="text-slate-400 text-[11px] font-medium">
+                    {formatDatePY(b.created_at.split('T')[0])}
+                  </span>
+                </div>
+
+                <span className={`text-[10px] uppercase font-black px-2 py-0.5 rounded-full border ${
+                  b.status === 'accepted'
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                    : b.status === 'sent'
+                    ? 'bg-blue-500/20 text-blue-300 border-blue-500/30'
+                    : 'bg-slate-800 text-slate-400 border-slate-700'
                 }`}>
-                  {b.status === 'accepted' ? 'Aceptado' : 'Borrador'}
-                </span>
-                <span className="text-xs text-slate-400">
-                  {formatDatePY(b.created_at.split('T')[0])}
+                  {b.status === 'accepted' ? 'Aceptado' : b.status === 'sent' ? 'Enviado' : 'Borrador'}
                 </span>
               </div>
 
-              <h2 className="text-lg font-bold text-slate-900 leading-snug">
-                {b.title}
-              </h2>
+              {/* CUERPO: CLIENTE, TÍTULO Y MONTO */}
+              <div className="flex items-end justify-between border-b border-slate-800/80 pb-3">
+                <div className="min-w-0 pr-2">
+                  <h3 className="font-extrabold text-sm sm:text-base text-white truncate">
+                    {b.client.name}
+                  </h3>
+                  <p className="text-xs text-slate-400 truncate mt-0.5">
+                    {b.title} • {b.items.length} ítems
+                  </p>
+                </div>
 
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
-                <span className="flex items-center space-x-1">
-                  <User className="w-3.5 h-3.5 text-slate-400" />
-                  <span>Cliente: <strong className="text-slate-700">{b.client.name}</strong></span>
-                </span>
-                <span>•</span>
-                <span>{b.items.length} ítems cargados</span>
-                <span>•</span>
-                <span>Margen global: <strong>{b.global_margin_pct}%</strong></span>
-              </div>
-            </div>
-
-            {/* Monto y Botones de Acción */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between lg:justify-end gap-4 shrink-0 pt-3 lg:pt-0 border-t lg:border-t-0 border-slate-100">
-              <div className="text-left sm:text-right">
-                <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
-                  Total al Cliente (IVA 10% inc.)
-                </span>
-                <div className="text-xl sm:text-2xl font-black text-slate-900">
-                  {formatPYG(b.total_sale_pyg)}
+                <div className="text-right shrink-0">
+                  <span className="text-[10px] text-slate-400 uppercase font-semibold block">Total</span>
+                  <span className="text-sm sm:text-base font-black text-amber-400">
+                    {formatPYG(b.total_sale_pyg)}
+                  </span>
                 </div>
               </div>
 
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={() => handleDownloadExcel(b)}
-                  className="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
-                  title="Descargar Excel Interno (con costos y proveedores)"
-                >
-                  <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-                </button>
-
+              {/* BOTONES TÁCTILES MÓVILES */}
+              <div className="grid grid-cols-4 gap-2 pt-0.5">
                 <button
                   onClick={() => handleShareWhatsApp(b)}
-                  className="p-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 transition-colors"
-                  title="Compartir por WhatsApp al cliente"
+                  className="py-2 px-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center space-x-1 shadow-md shadow-emerald-600/20 active:scale-95 transition-all"
+                  title="Compartir por WhatsApp"
                 >
-                  <MessageSquare className="w-4 h-4" />
+                  <Share2 className="w-3.5 h-3.5" />
+                  <span className="text-[11px]">Wsp</span>
                 </button>
 
                 <button
                   onClick={() => handleDownloadPDF(b)}
                   disabled={downloadingId === b.id}
-                  className="inline-flex items-center space-x-1.5 px-3.5 py-2.5 rounded-xl bg-[#0F2137] hover:bg-[#1a375a] text-amber-400 border border-amber-400/30 text-xs font-bold shadow-sm transition-all"
-                  title="Descargar PDF para Cliente (Marco Dorado, sin costos)"
+                  className="py-2 px-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs flex items-center justify-center space-x-1 shadow-md shadow-amber-400/20 active:scale-95 transition-all"
+                  title="Descargar PDF Dorado"
                 >
-                  <Download className="w-4 h-4" />
-                  <span className="hidden sm:inline">PDF Cliente</span>
+                  <Download className="w-3.5 h-3.5" />
+                  <span className="text-[11px]">{downloadingId === b.id ? '...' : 'PDF'}</span>
                 </button>
+
+                <Link
+                  href={`/presupuestos/${b.id}`}
+                  className="py-2 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center justify-center space-x-1 border border-slate-700 active:scale-95 transition-all"
+                  title="Ver y Editar"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <span className="text-[11px]">Ver</span>
+                </Link>
 
                 <button
                   onClick={() => handleDuplicate(b.id)}
-                  className="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
-                  title="Duplicar este presupuesto"
+                  className="py-2 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs flex items-center justify-center space-x-1 border border-slate-700 active:scale-95 transition-all"
+                  title="Duplicar Presupuesto"
                 >
-                  <Copy className="w-4 h-4" />
-                </button>
-
-                <button
-                  onClick={() => handleDelete(b.id)}
-                  className="p-2.5 rounded-xl bg-slate-100 hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors"
-                  title="Eliminar presupuesto"
-                >
-                  <Trash2 className="w-4 h-4" />
+                  <Copy className="w-3.5 h-3.5" />
+                  <span className="text-[11px]">Clonar</span>
                 </button>
               </div>
-            </div>
-          </div>
-        ))}
 
-        {filteredBudgets.length === 0 && (
-          <div className="text-center py-12 bg-white rounded-2xl border border-slate-200 p-8 space-y-3">
-            <FileText className="w-10 h-10 text-slate-300 mx-auto" />
-            <h3 className="text-base font-bold text-slate-800">No hay presupuestos registrados</h3>
-            <p className="text-xs text-slate-500 max-w-sm mx-auto">
-              Arma tu primer presupuesto en minutos desde el celular o la computadora.
-            </p>
-            <Link
-              href="/presupuestos/nuevo"
-              className="inline-flex items-center space-x-2 bg-amber-400 hover:bg-amber-500 text-slate-950 font-bold px-4 py-2 rounded-xl text-xs transition-all"
-            >
-              <PlusCircle className="w-4 h-4" />
-              <span>Crear Nuevo Presupuesto</span>
-            </Link>
-          </div>
+            </div>
+          ))
         )}
       </div>
 

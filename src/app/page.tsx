@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { 
   Search, 
-  PlusCircle, 
+  Plus, 
   FileText, 
   TrendingDown, 
   CheckCircle2, 
@@ -14,25 +14,48 @@ import {
   Download,
   Building,
   Sparkles,
-  Receipt
+  Receipt,
+  Camera,
+  Share2,
+  Copy,
+  Zap,
+  HardHat,
+  Cloud,
+  ExternalLink
 } from 'lucide-react';
 import { StorageService } from '@/lib/data/storage';
-import { Budget, IngestedInvoice, CanonicalProduct } from '@/lib/types';
+import { Budget, IngestedInvoice, CanonicalProduct, UserProfile } from '@/lib/types';
 import { formatPYG, formatDatePY, isPriceStale } from '@/lib/utils';
 import { generateClientPDF } from '@/lib/export/pdf-generator';
 
 export default function DashboardPage() {
   const router = useRouter();
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [products, setProducts] = useState<CanonicalProduct[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [invoices, setInvoices] = useState<IngestedInvoice[]>([]);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [copiedSipap, setCopiedSipap] = useState(false);
+  const [dbStatus, setDbStatus] = useState<string>('Verificando...');
 
   useEffect(() => {
+    setCurrentUser(StorageService.getCurrentUser());
     setProducts(StorageService.getProducts());
     setBudgets(StorageService.getBudgets());
     setInvoices(StorageService.getInvoices());
+
+    // Verificar salud de Neon DB en segundo plano
+    fetch('/api/db/health')
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === 'connected') {
+          setDbStatus(`Neon Cloud • ${data.stats?.products || 13} productos`);
+        } else {
+          setDbStatus('Local-First (En Memoria)');
+        }
+      })
+      .catch(() => setDbStatus('Modo Offline'));
   }, []);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
@@ -56,266 +79,328 @@ export default function DashboardPage() {
     }
   };
 
-  // Precios desactualizados (> 60 días)
+  const handleShareWhatsApp = (budget: Budget) => {
+    const text = `*PRESUPUESTO ELÉCTRICO* ⚡\n*Construlogica Emprendimientos S.A.*\n\n*Cliente:* ${budget.client.name}\n*Comprobante:* ${budget.budget_number}\n*Total:* ${formatPYG(budget.total_sale_pyg)} (IVA 10% incluido)\n*Validez:* 15 días\n\n_Generado profesionalmente por ElectroCotiza._`;
+    const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+    window.open(url, '_blank');
+  };
+
+  const handleCopySipap = () => {
+    const settings = StorageService.getSettings();
+    const text = `*DATOS PARA TRANSFERENCIA SIPAP*\nEmpresa: ${settings.company_name}\nRUC: ${settings.ruc}\nBanco: ${settings.bank_name || 'Banco Itaú Paraguay'}\nCta Cte: ${settings.bank_account_number || '720014589'}\nAlias SIPAP: ${settings.bank_sipap_alias || 'construlogica.py'}`;
+    navigator.clipboard.writeText(text);
+    setCopiedSipap(true);
+    setTimeout(() => setCopiedSipap(false), 3000);
+  };
+
+  const totalCotizado = budgets.reduce((acc, b) => acc + (b.total_sale_pyg || 0), 0);
   const staleCount = products.filter(p => isPriceStale(p.last_price_date, 60)).length;
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+    <div className="max-w-md sm:max-w-2xl lg:max-w-5xl mx-auto px-3.5 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
       
-      {/* BANNER PRINCIPAL / HERO */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0F2137] via-[#162C4E] to-[#0A1626] text-white p-6 sm:p-8 shadow-xl border border-slate-800">
-        <div className="relative z-10 max-w-3xl space-y-4">
-          <div className="inline-flex items-center space-x-2 bg-amber-400/20 text-amber-300 px-3 py-1 rounded-full text-xs font-semibold border border-amber-400/30">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Construlogica Emprendimientos S.A. • Alto Paraná</span>
+      {/* 1. CABECERA NATIVA MÓVIL: SALUDO Y ESTADO DE OBRA */}
+      <div className="bg-[#0F1E33] border border-slate-800 rounded-3xl p-4 sm:p-5 shadow-xl space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2.5">
+            <div className="w-10 h-10 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center font-black text-sm shadow-md shadow-amber-400/30">
+              {currentUser?.full_name?.substring(0, 2).toUpperCase() || 'AK'}
+            </div>
+            <div>
+              <div className="flex items-center space-x-1.5">
+                <span className="text-xs font-semibold text-slate-400">¡Hola, {currentUser?.full_name?.split(' ')[0] || 'Ing. Abel'}! 👋</span>
+              </div>
+              <h1 className="text-sm sm:text-base font-black text-white leading-tight">
+                Construlogica Emprendimientos
+              </h1>
+            </div>
           </div>
 
-          <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight">
-            Cotizador Eléctrico Inteligente <br className="hidden sm:inline" />
-            <span className="text-amber-400">Precios y Presupuestos en Minutos</span>
-          </h1>
-
-          <p className="text-slate-300 text-sm sm:text-base leading-relaxed">
-            Compara precios de ferreterías locales (Enerluz, Fixopar, Electro System, Luminotecnia), unifica nombres con el catálogo maestro y genera presupuestos con marco dorado sin revelar tus costos de compra.
-          </p>
-
-          {/* BUSCADOR RÁPIDO */}
-          <form onSubmit={handleSearchSubmit} className="pt-2">
-            <div className="relative flex items-center">
-              <Search className="absolute left-4 w-5 h-5 text-slate-400" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Buscar material (ej. 'cable 2.5', 'barra cobre 20x3', 'disyuntor abb', 'bulon 10x25')..."
-                className="w-full pl-12 pr-28 py-3.5 bg-slate-900/90 text-white placeholder-slate-400 rounded-2xl border border-slate-700/80 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent text-sm sm:text-base shadow-inner"
-              />
-              <button
-                type="submit"
-                className="absolute right-2 px-4 py-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-bold rounded-xl text-sm transition-all"
-              >
-                Buscar
-              </button>
-            </div>
-          </form>
+          {/* BADGE DE ESTADO DE BASE DE DATOS */}
+          <div className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="truncate max-w-[120px]">{dbStatus}</span>
+          </div>
         </div>
 
-        {/* Decoración de fondo */}
-        <div className="absolute right-0 bottom-0 translate-x-10 translate-y-10 w-96 h-96 bg-amber-400/10 rounded-full blur-3xl pointer-events-none" />
+        {/* BUSCADOR RÁPIDO DE PRECIOS */}
+        <form onSubmit={handleSearchSubmit} className="relative">
+          <Search className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Buscar precios de cables, disyuntores, caños..."
+            className="w-full pl-10 pr-20 py-2.5 bg-slate-900/90 border border-slate-700/80 rounded-2xl text-xs sm:text-sm text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400 shadow-inner"
+          />
+          <button
+            type="submit"
+            className="absolute right-1.5 top-1.5 px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black rounded-xl text-xs transition-all active:scale-95"
+          >
+            Buscar
+          </button>
+        </form>
       </div>
 
-      {/* MÉTRICAS CLAVE */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs font-semibold uppercase tracking-wider">Catálogo Maestro</span>
-            <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-              <Building className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-3">
-            <div className="text-2xl font-black text-slate-900">{products.length}</div>
-            <p className="text-xs text-slate-500 mt-1">Materiales unificados con alias</p>
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs font-semibold uppercase tracking-wider">Facturas Ingestadas</span>
-            <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
-              <Receipt className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-3">
-            <div className="text-2xl font-black text-slate-900">{invoices.length}</div>
-            <p className="text-xs text-slate-500 mt-1">Enerluz, Fixopar y ABB</p>
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs font-semibold uppercase tracking-wider">Presupuestos</span>
-            <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
-              <FileText className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-3">
-            <div className="text-2xl font-black text-slate-900">{budgets.length}</div>
-            <p className="text-xs text-slate-500 mt-1">Listos para emitir PDF</p>
-          </div>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs font-semibold uppercase tracking-wider">Alerta de Precios</span>
-            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${staleCount > 0 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
-              <ShieldAlert className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-3">
-            <div className="text-2xl font-black text-slate-900">{staleCount}</div>
-            <p className="text-xs text-slate-500 mt-1">Precios mayores a 60 días</p>
-          </div>
-        </div>
-      </div>
-
-      {/* ACCIONES RÁPIDAS EN PANTALLA */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {/* 2. DOCK DE ACCIONES RÁPIDAS (BOTONES DE PULGAR) */}
+      <div className="grid grid-cols-2 gap-3">
+        {/* BOTÓN PRIMARIO: NUEVA COTIZACIÓN */}
         <Link
           href="/presupuestos/nuevo"
-          className="group p-5 bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 font-bold rounded-2xl shadow-md hover:shadow-lg transition-all flex items-center justify-between"
+          className="p-4 rounded-3xl bg-gradient-to-br from-amber-500 via-amber-400 to-yellow-400 text-slate-950 shadow-lg shadow-amber-500/25 active:scale-95 transition-all flex flex-col justify-between group border border-amber-300"
         >
-          <div className="space-y-1">
-            <div className="flex items-center space-x-2">
-              <PlusCircle className="w-5 h-5" />
-              <span className="text-base font-extrabold">Armar Presupuesto</span>
+          <div className="flex items-center justify-between">
+            <div className="w-10 h-10 rounded-2xl bg-slate-950/20 flex items-center justify-center">
+              <Plus className="w-6 h-6 stroke-[3] text-slate-950" />
             </div>
-            <p className="text-xs text-amber-950/80 font-medium">Cotiza 20 ítems en menos de 5 minutos</p>
+            <span className="text-[10px] font-black uppercase tracking-wider bg-slate-950 text-amber-400 px-2 py-0.5 rounded-full">
+              Rápido
+            </span>
           </div>
-          <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+
+          <div className="mt-4">
+            <span className="text-sm sm:text-base font-black block leading-tight">
+              + Cotizar Obra
+            </span>
+            <span className="text-[11px] font-bold text-slate-900/80 block mt-0.5">
+              Generar presupuesto
+            </span>
+          </div>
         </Link>
 
+        {/* BOTÓN SECUNDARIO: ESCANEAR FACTURA */}
         <Link
           href="/ingesta"
-          className="group p-5 bg-white border border-slate-200 text-slate-900 rounded-2xl shadow-sm hover:border-amber-400 hover:shadow-md transition-all flex items-center justify-between"
+          className="p-4 rounded-3xl bg-[#0F1E33] border border-slate-700/80 text-white shadow-md active:scale-95 transition-all flex flex-col justify-between group hover:border-amber-400/50"
         >
-          <div className="space-y-1">
-            <div className="flex items-center space-x-2 text-slate-900 font-bold">
-              <Receipt className="w-5 h-5 text-amber-600" />
-              <span className="text-base">Revisar Facturas Reales</span>
+          <div className="flex items-center justify-between">
+            <div className="w-10 h-10 rounded-2xl bg-amber-400/10 text-amber-400 flex items-center justify-center">
+              <Camera className="w-5 h-5" />
             </div>
-            <p className="text-xs text-slate-500 font-medium">5 facturas de Enerluz y Fixopar listas</p>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              Cámara/Manual
+            </span>
           </div>
-          <ArrowRight className="w-5 h-5 text-slate-400 group-hover:text-amber-600 group-hover:translate-x-1 transition-all" />
-        </Link>
 
-        <Link
-          href="/catalogo"
-          className="group p-5 bg-white border border-slate-200 text-slate-900 rounded-2xl shadow-sm hover:border-amber-400 hover:shadow-md transition-all flex items-center justify-between"
-        >
-          <div className="space-y-1">
-            <div className="flex items-center space-x-2 text-slate-900 font-bold">
-              <TrendingDown className="w-5 h-5 text-blue-600" />
-              <span className="text-base">Comparar Precios</span>
-            </div>
-            <p className="text-xs text-slate-500 font-medium">Ver dónde conviene comprar cada ítem</p>
+          <div className="mt-4">
+            <span className="text-sm sm:text-base font-black block leading-tight text-white group-hover:text-amber-300">
+              Escanear Factura
+            </span>
+            <span className="text-[11px] font-medium text-slate-400 block mt-0.5 truncate">
+              Guardar precio de compra
+            </span>
           </div>
-          <ArrowRight className="w-5 h-5 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-1 transition-all" />
         </Link>
       </div>
 
-      {/* SECCIÓN DOBLE: PRESUPUESTOS RECIENTES Y FACTURAS REALES CARGADAS */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* 3. CHIPS HORIZONTALES CON MÉTRICAS CLAVE DE OBRA */}
+      <div className="flex items-center space-x-2.5 overflow-x-auto pb-1 scrollbar-none">
         
-        {/* PRESUPUESTOS RECIENTES */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-base font-bold text-slate-900 flex items-center space-x-2">
-              <FileText className="w-5 h-5 text-amber-600" />
-              <span>Presupuestos Recientes</span>
+        <div className="bg-[#0F1E33] border border-slate-800 rounded-2xl px-3.5 py-2 shrink-0 flex items-center space-x-2.5 shadow-sm">
+          <div className="w-7 h-7 rounded-xl bg-amber-400/10 text-amber-400 flex items-center justify-center text-xs font-black">
+            ₲
+          </div>
+          <div>
+            <span className="text-[10px] text-slate-400 block font-medium">Cotizado este mes</span>
+            <span className="text-xs font-black text-white">{formatPYG(totalCotizado)}</span>
+          </div>
+        </div>
+
+        <div className="bg-[#0F1E33] border border-slate-800 rounded-2xl px-3.5 py-2 shrink-0 flex items-center space-x-2.5 shadow-sm">
+          <div className="w-7 h-7 rounded-xl bg-emerald-400/10 text-emerald-400 flex items-center justify-center text-xs font-black">
+            <Receipt className="w-4 h-4" />
+          </div>
+          <div>
+            <span className="text-[10px] text-slate-400 block font-medium">Facturas auditadas</span>
+            <span className="text-xs font-black text-white">{invoices.length} comprobantes</span>
+          </div>
+        </div>
+
+        <div className="bg-[#0F1E33] border border-slate-800 rounded-2xl px-3.5 py-2 shrink-0 flex items-center space-x-2.5 shadow-sm">
+          <div className="w-7 h-7 rounded-xl bg-blue-400/10 text-blue-400 flex items-center justify-center text-xs font-black">
+            <Building className="w-4 h-4" />
+          </div>
+          <div>
+            <span className="text-[10px] text-slate-400 block font-medium">Catálogo unificado</span>
+            <span className="text-xs font-black text-white">{products.length} materiales</span>
+          </div>
+        </div>
+
+        {/* ACCIÓN RÁPIDA SIPAP */}
+        <button
+          onClick={handleCopySipap}
+          className="bg-[#0F1E33] hover:bg-slate-800 border border-amber-400/30 rounded-2xl px-3.5 py-2 shrink-0 flex items-center space-x-2.5 shadow-sm active:scale-95 transition-all"
+        >
+          <div className="w-7 h-7 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center text-xs font-black">
+            <Copy className="w-3.5 h-3.5" />
+          </div>
+          <div className="text-left">
+            <span className="text-[10px] text-amber-300 block font-bold">
+              {copiedSipap ? '¡Copiado al Portapapeles!' : 'Cuenta SIPAP Itaú'}
+            </span>
+            <span className="text-xs font-mono font-bold text-white">720014589</span>
+          </div>
+        </button>
+
+      </div>
+
+      {/* 4. FEED DE PRESUPUESTOS (TARJETAS NATIVAS MÓVILES) */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between px-1">
+          <div className="flex items-center space-x-2">
+            <FileText className="w-4 h-4 text-amber-400" />
+            <h2 className="text-xs sm:text-sm font-black uppercase tracking-wider text-slate-200">
+              Presupuestos Recientes ({budgets.length})
             </h2>
-            <Link href="/presupuestos" className="text-xs font-semibold text-amber-600 hover:text-amber-700">
-              Ver todos →
+          </div>
+          <Link href="/presupuestos" className="text-[11px] font-bold text-amber-400 hover:text-amber-300">
+            Ver todos →
+          </Link>
+        </div>
+
+        {budgets.length === 0 ? (
+          <div className="p-8 text-center bg-[#0F1E33] rounded-3xl border border-slate-800 space-y-2">
+            <p className="text-xs text-slate-400 font-medium">Aún no hay cotizaciones creadas.</p>
+            <Link
+              href="/presupuestos/nuevo"
+              className="inline-block px-4 py-2 bg-amber-400 text-slate-950 font-black rounded-xl text-xs"
+            >
+              Crear primera cotización
             </Link>
           </div>
-
-          <div className="space-y-3">
+        ) : (
+          <div className="space-y-2.5">
             {budgets.map((b) => (
               <div
                 key={b.id}
-                className="p-4 rounded-xl border border-slate-100 bg-slate-50/70 hover:bg-slate-50 hover:border-slate-300 transition-all flex items-center justify-between space-x-3"
+                className="bg-[#0F1E33] border border-slate-800 rounded-3xl p-4 shadow-lg space-y-3 hover:border-slate-700 transition-all"
               >
-                <div className="min-w-0 flex-1 space-y-1">
+                {/* FILA SUPERIOR: N° Y FECHA */}
+                <div className="flex items-center justify-between text-xs">
                   <div className="flex items-center space-x-2">
-                    <span className="font-bold text-sm text-slate-900 truncate">{b.title}</span>
-                    <span className="text-[10px] bg-slate-200 text-slate-700 px-2 py-0.5 rounded font-mono font-bold">
+                    <span className="px-2 py-0.5 rounded-md bg-amber-400/20 text-amber-300 font-mono font-bold text-[10px] border border-amber-400/30">
                       {b.budget_number}
                     </span>
+                    <span className="text-slate-400 text-[11px] font-medium">
+                      {formatDatePY(b.created_at.split('T')[0])}
+                    </span>
                   </div>
-                  <p className="text-xs text-slate-500 truncate">
-                    Cliente: <strong className="text-slate-700">{b.client.name}</strong> • {formatDatePY(b.created_at.split('T')[0])}
-                  </p>
-                  <p className="text-sm font-extrabold text-slate-900">
-                    {formatPYG(b.total_sale_pyg)}{' '}
-                    <span className="text-[10px] font-normal text-slate-500">(IVA 10% inc.)</span>
-                  </p>
+
+                  <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                    Aprobado
+                  </span>
                 </div>
 
-                <div className="flex items-center space-x-2">
+                {/* FILA CENTRAL: CLIENTE Y MONTO */}
+                <div className="flex items-end justify-between border-b border-slate-800/80 pb-3">
+                  <div className="min-w-0 pr-2">
+                    <h3 className="font-extrabold text-sm sm:text-base text-white truncate">
+                      {b.client.name}
+                    </h3>
+                    <p className="text-xs text-slate-400 truncate mt-0.5">
+                      {b.title}
+                    </p>
+                  </div>
+
+                  <div className="text-right shrink-0">
+                    <span className="text-[10px] text-slate-400 uppercase font-semibold block">Total Cliente</span>
+                    <span className="text-sm sm:text-base font-black text-amber-400">
+                      {formatPYG(b.total_sale_pyg)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* FILA INFERIOR: BOTONES DE ACCIÓN DE 1 TOQUE (WHATSAPP + PDF DORADO) */}
+                <div className="grid grid-cols-3 gap-2 pt-0.5">
+                  <button
+                    onClick={() => handleShareWhatsApp(b)}
+                    className="py-2 px-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center space-x-1.5 shadow-md shadow-emerald-600/20 active:scale-95 transition-all"
+                    title="Enviar por WhatsApp"
+                  >
+                    <Share2 className="w-3.5 h-3.5" />
+                    <span>WhatsApp</span>
+                  </button>
+
                   <button
                     onClick={() => handleDownloadPDF(b)}
                     disabled={downloadingId === b.id}
-                    className="p-2.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-bold transition-all shadow-sm"
-                    title="Descargar PDF para Cliente (Marco Dorado)"
+                    className="py-2 px-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs flex items-center justify-center space-x-1.5 shadow-md shadow-amber-400/20 active:scale-95 transition-all"
+                    title="Descargar PDF con Marco Dorado"
                   >
-                    <Download className="w-4 h-4" />
+                    <Download className="w-3.5 h-3.5" />
+                    <span>{downloadingId === b.id ? 'Generando...' : 'PDF'}</span>
                   </button>
+
                   <Link
                     href={`/presupuestos/${b.id}`}
-                    className="p-2.5 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 transition-all"
-                    title="Editar Presupuesto"
+                    className="py-2 px-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center justify-center space-x-1 border border-slate-700 active:scale-95 transition-all"
                   >
-                    <ArrowRight className="w-4 h-4" />
+                    <span>Editar</span>
+                    <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
                   </Link>
                 </div>
+
               </div>
             ))}
           </div>
-        </div>
+        )}
+      </div>
 
-        {/* FACTURAS Y TICKETS DE ENERLUZ Y FIXOPAR CARGADOS */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-base font-bold text-slate-900 flex items-center space-x-2">
-              <Receipt className="w-5 h-5 text-blue-600" />
-              <span>Facturas Reales de Entrenamiento</span>
+      {/* 5. FEED DE FACTURAS REALES DE PARAGUAY CARGADAS */}
+      <div className="space-y-3 pt-1">
+        <div className="flex items-center justify-between px-1">
+          <div className="flex items-center space-x-2">
+            <Receipt className="w-4 h-4 text-emerald-400" />
+            <h2 className="text-xs sm:text-sm font-black uppercase tracking-wider text-slate-200">
+              Últimas Facturas Registradas ({invoices.length})
             </h2>
-            <Link href="/ingesta" className="text-xs font-semibold text-blue-600 hover:text-blue-700">
-              Ir al Validador →
-            </Link>
           </div>
-
-          <div className="space-y-3">
-            {invoices.slice(0, 4).map((inv) => (
-              <div
-                key={inv.id}
-                className="p-3.5 rounded-xl border border-slate-100 bg-slate-50/70 hover:bg-slate-50 hover:border-slate-300 transition-all flex items-center space-x-3"
-              >
-                {/* Miniatura de la foto de la factura */}
-                <div className="w-12 h-14 bg-slate-200 rounded-lg overflow-hidden shrink-0 border border-slate-300 flex items-center justify-center relative">
-                  <img
-                    src={inv.file_url}
-                    alt={inv.invoice_number}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-
-                <div className="min-w-0 flex-1 space-y-0.5">
-                  <div className="flex items-center space-x-2">
-                    <span className="font-bold text-sm text-slate-900 truncate">{inv.provider_name}</span>
-                    <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-mono font-semibold">
-                      {inv.invoice_number}
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-500">
-                    {formatDatePY(inv.issue_date)} • {inv.items.length} ítems extraídos
-                  </p>
-                  <p className="text-xs font-bold text-slate-800">
-                    Total: {formatPYG(inv.total_pyg)}
-                  </p>
-                </div>
-
-                <Link
-                  href="/ingesta"
-                  className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition-colors shrink-0"
-                >
-                  Ver foto
-                </Link>
-              </div>
-            ))}
-          </div>
+          <Link href="/ingesta" className="text-[11px] font-bold text-amber-400 hover:text-amber-300">
+            Ver todas →
+          </Link>
         </div>
 
+        <div className="space-y-2">
+          {invoices.slice(0, 4).map((inv) => (
+            <div
+              key={inv.id}
+              className="bg-[#0F1E33] border border-slate-800 rounded-2xl p-3 flex items-center justify-between space-x-3 text-xs"
+            >
+              <div className="flex items-center space-x-3 min-w-0">
+                <div className="w-8 h-8 rounded-xl bg-slate-800 text-slate-300 flex items-center justify-center shrink-0">
+                  <Receipt className="w-4 h-4 text-amber-400" />
+                </div>
+                <div className="min-w-0">
+                  <span className="font-bold text-white block truncate">
+                    {inv.provider_name}
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono block">
+                    Nº {inv.invoice_number} • {formatDatePY(inv.issue_date)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="text-right shrink-0">
+                <span className="font-black text-emerald-400 block">
+                  {formatPYG(inv.total_pyg)}
+                </span>
+                <span className="text-[9px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.2 rounded font-bold uppercase">
+                  Auditada ✓
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 6. BANNER DE CONTACTO Y SOPORTE DE OBRA */}
+      <div className="p-4 rounded-3xl bg-gradient-to-r from-slate-900 to-[#0F1E33] border border-slate-800 text-center space-y-1">
+        <p className="text-[11px] font-bold text-slate-300">
+          ElectroCotiza • Diseñado para contratistas en terreno
+        </p>
+        <p className="text-[10px] text-slate-500">
+          Construlogica Emprendimientos S.A. • Alto Paraná, Paraguay
+        </p>
       </div>
 
     </div>

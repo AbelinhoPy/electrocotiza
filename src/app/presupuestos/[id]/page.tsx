@@ -6,96 +6,110 @@ import Link from 'next/link';
 import { 
   ArrowLeft, 
   Download, 
-  FileSpreadsheet, 
-  Trash2, 
-  Plus, 
+  Share2, 
+  Copy, 
   Save, 
-  User, 
-  Calendar, 
-  Building2, 
-  Calculator,
-  CheckCircle2,
-  Copy,
-  MessageSquare,
-  Landmark,
-  Check,
-  Share2
+  Trash2, 
+  FileSpreadsheet, 
+  CheckCircle2, 
+  Landmark, 
+  Check, 
+  Plus, 
+  Building2,
+  Eye,
+  FileText
 } from 'lucide-react';
 import { StorageService } from '@/lib/data/storage';
-import { Budget, BudgetItem, Settings } from '@/lib/types';
+import { Budget, BudgetItem } from '@/lib/types';
 import { formatPYG, formatDatePY } from '@/lib/utils';
 import { generateClientPDF } from '@/lib/export/pdf-generator';
 import { generateInternalExcel } from '@/lib/export/excel-generator';
 
-export default function DetallePresupuestoPage() {
+export default function PresupuestoDetallePage() {
   const params = useParams();
   const router = useRouter();
-  const budgetId = params?.id as string;
+  const id = params?.id as string;
 
   const [budget, setBudget] = useState<Budget | null>(null);
-  const [settings, setSettings] = useState<Settings>(StorageService.getSettings());
-  const [isSavedNotice, setIsSavedNotice] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [isSavedNotice, setIsSavedNotice] = useState(false);
+  const [copiedBank, setCopiedBank] = useState(false);
+
+  const settings = StorageService.getSettings();
 
   useEffect(() => {
-    setSettings(StorageService.getSettings());
-    if (budgetId) {
-      const b = StorageService.getBudgetById(budgetId);
+    if (id) {
+      const b = StorageService.getBudgetById(id);
       if (b) {
         setBudget(b);
+      } else {
+        router.push('/presupuestos');
       }
     }
-  }, [budgetId]);
+  }, [id, router]);
 
   if (!budget) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-12 text-center space-y-4">
-        <h2 className="text-xl font-bold text-slate-800">Presupuesto no encontrado</h2>
-        <Link
-          href="/presupuestos"
-          className="inline-flex items-center space-x-2 text-sm text-amber-600 font-bold hover:underline"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span>Volver al listado de presupuestos</span>
-        </Link>
+      <div className="min-h-[50vh] flex items-center justify-center text-xs text-slate-400">
+        Cargando presupuesto...
       </div>
     );
   }
 
-  // Recalcular totales al cambiar cantidades o márgenes
   const handleQuantityChange = (index: number, newQty: number) => {
-    const updated = { ...budget };
-    const item = updated.items[index];
-    const qty = Math.max(0.1, newQty);
-    item.quantity = qty;
-    item.total_sale_pyg = Math.round(item.unit_sale_pyg * qty);
+    const updatedItems = [...budget.items];
+    const it = updatedItems[index];
+    const qty = Math.max(0, newQty);
+    const saleUnit = Math.round(it.unit_cost_pyg * (1 + it.margin_pct / 100));
+    it.quantity = qty;
+    it.unit_sale_pyg = saleUnit;
+    it.total_sale_pyg = Math.round(saleUnit * qty);
 
-    updated.total_cost_pyg = updated.items.reduce((sum, it) => sum + (it.unit_cost_pyg * it.quantity), 0);
-    updated.total_sale_pyg = updated.items.reduce((sum, it) => sum + it.total_sale_pyg, 0);
-    updated.iva_amount_pyg = Math.round(updated.total_sale_pyg / 11);
-    setBudget(updated);
+    const totalCost = updatedItems.reduce((acc, curr) => acc + (curr.unit_cost_pyg * curr.quantity), 0);
+    const totalSale = updatedItems.reduce((acc, curr) => acc + curr.total_sale_pyg, 0);
+
+    setBudget({
+      ...budget,
+      items: updatedItems,
+      total_cost_pyg: totalCost,
+      total_sale_pyg: totalSale,
+      updated_at: new Date().toISOString(),
+    });
   };
 
   const handleMarginChange = (index: number, newMargin: number) => {
-    const updated = { ...budget };
-    const item = updated.items[index];
-    item.margin_pct = newMargin;
-    item.unit_sale_pyg = Math.round(item.unit_cost_pyg * (1 + newMargin / 100));
-    item.total_sale_pyg = Math.round(item.unit_sale_pyg * item.quantity);
+    const updatedItems = [...budget.items];
+    const it = updatedItems[index];
+    const margin = Math.max(0, newMargin);
+    const saleUnit = Math.round(it.unit_cost_pyg * (1 + margin / 100));
+    it.margin_pct = margin;
+    it.unit_sale_pyg = saleUnit;
+    it.total_sale_pyg = Math.round(saleUnit * it.quantity);
 
-    updated.total_cost_pyg = updated.items.reduce((sum, it) => sum + (it.unit_cost_pyg * it.quantity), 0);
-    updated.total_sale_pyg = updated.items.reduce((sum, it) => sum + it.total_sale_pyg, 0);
-    updated.iva_amount_pyg = Math.round(updated.total_sale_pyg / 11);
-    setBudget(updated);
+    const totalCost = updatedItems.reduce((acc, curr) => acc + (curr.unit_cost_pyg * curr.quantity), 0);
+    const totalSale = updatedItems.reduce((acc, curr) => acc + curr.total_sale_pyg, 0);
+
+    setBudget({
+      ...budget,
+      items: updatedItems,
+      total_cost_pyg: totalCost,
+      total_sale_pyg: totalSale,
+      updated_at: new Date().toISOString(),
+    });
   };
 
   const handleRemoveItem = (index: number) => {
-    const updated = { ...budget };
-    updated.items = updated.items.filter((_, i) => i !== index);
-    updated.total_cost_pyg = updated.items.reduce((sum, it) => sum + (it.unit_cost_pyg * it.quantity), 0);
-    updated.total_sale_pyg = updated.items.reduce((sum, it) => sum + it.total_sale_pyg, 0);
-    updated.iva_amount_pyg = Math.round(updated.total_sale_pyg / 11);
-    setBudget(updated);
+    const updatedItems = budget.items.filter((_, i) => i !== index);
+    const totalCost = updatedItems.reduce((acc, curr) => acc + (curr.unit_cost_pyg * curr.quantity), 0);
+    const totalSale = updatedItems.reduce((acc, curr) => acc + curr.total_sale_pyg, 0);
+
+    setBudget({
+      ...budget,
+      items: updatedItems,
+      total_cost_pyg: totalCost,
+      total_sale_pyg: totalSale,
+      updated_at: new Date().toISOString(),
+    });
   };
 
   const handleSave = () => {
@@ -110,8 +124,8 @@ export default function DetallePresupuestoPage() {
       const doc = await generateClientPDF(budget, settings);
       doc.save(`Presupuesto_${budget.budget_number}_${budget.client.name.replace(/\s+/g, '_')}.pdf`);
     } catch (err) {
-      console.error(err);
-      alert('Error generando PDF.');
+      console.error('Error generando PDF', err);
+      alert('Error al generar PDF del presupuesto.');
     } finally {
       setDownloading(false);
     }
@@ -121,244 +135,210 @@ export default function DetallePresupuestoPage() {
     generateInternalExcel(budget);
   };
 
-  const [copiedBank, setCopiedBank] = useState(false);
-
-  const handleDuplicate = () => {
-    const copy = StorageService.duplicateBudget(budget.id);
-    if (copy) {
-      router.push(`/presupuestos/${copy.id}`);
-    }
-  };
-
-  const handleCopyBank = () => {
-    const bankText = `*DATOS PARA TRANSFERENCIA BANCARIA (SIPAP)*\n` +
-      `Banco: ${settings.bank_name || 'Banco Itaú Paraguay'}\n` +
-      `Titular: ${settings.bank_account_holder || settings.company_name}\n` +
-      `RUC: ${settings.ruc}\n` +
-      `Cuenta N°: ${settings.bank_account_number}\n` +
-      `Tipo: ${settings.bank_account_type || 'Cuenta Corriente'}\n` +
-      (settings.bank_sipap_alias ? `Alias SIPAP: ${settings.bank_sipap_alias}\n` : '');
-
-    navigator.clipboard.writeText(bankText);
-    setCopiedBank(true);
-    setTimeout(() => setCopiedBank(false), 3000);
-  };
-
   const handleShareWhatsApp = () => {
     const phone = budget.client.phone ? budget.client.phone.replace(/[^0-9]/g, '') : '';
-    const itemsSummary = budget.items
-      .slice(0, 5)
-      .map((it, idx) => `  ${idx + 1}. ${it.description} (${it.quantity} ${it.unit})`)
-      .join('\n');
-    const moreText = budget.items.length > 5 ? `\n  ... y ${budget.items.length - 5} ítems más.` : '';
-
-    const text = `*PRESUPUESTO ELÉCTRICO ${budget.budget_number}*\n` +
-      `*De:* ${settings.company_name} (Ing. Abel K.)\n` +
-      `*Para:* ${budget.client.name}\n` +
-      `*Trabajo:* ${budget.title}\n\n` +
-      `*Resumen:* \n${itemsSummary}${moreText}\n\n` +
+    const text = `*PRESUPUESTO ELÉCTRICO ${budget.budget_number}* ⚡\n` +
+      `*De:* Construlogica Emprendimientos S.A.\n` +
+      `*Cliente:* ${budget.client.name}\n` +
+      `*Obra / Trabajo:* ${budget.title}\n\n` +
       `💰 *Total Presupuesto:* ${formatPYG(budget.total_sale_pyg)} (IVA 10% incluido)\n` +
       `⏱️ *Validez:* ${budget.validity_days} días\n` +
       `📦 *Entrega:* ${budget.delivery_terms}\n` +
       `💳 *Pago:* ${budget.payment_terms}\n\n` +
-      `_Presupuesto oficial emitido por ElectroCotiza. Le enviamos el PDF formal detallado con membrete y marco de garantía._`;
+      `_Presupuesto oficial emitido por ElectroCotiza._`;
 
     const encoded = encodeURIComponent(text);
     const url = phone ? `https://wa.me/${phone}?text=${encoded}` : `https://wa.me/?text=${encoded}`;
     window.open(url, '_blank');
   };
 
+  const handleCopyBank = () => {
+    const text = `*DATOS PARA TRANSFERENCIA BANCARIA (SIPAP)*\n` +
+      `Banco: ${settings.bank_name || 'Banco Itaú Paraguay'}\n` +
+      `Titular: ${settings.bank_account_holder || settings.company_name}\n` +
+      `Cta Cte (₲): ${settings.bank_account_number || '720014589'}\n` +
+      `RUC: ${settings.ruc}\n` +
+      `Alias SIPAP: ${settings.bank_sipap_alias || 'construlogica.py'}\n` +
+      `Ref: Presupuesto ${budget.budget_number}`;
+    navigator.clipboard.writeText(text);
+    setCopiedBank(true);
+    setTimeout(() => setCopiedBank(false), 3000);
+  };
+
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+    <div className="max-w-md sm:max-w-2xl lg:max-w-5xl mx-auto px-3.5 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
       
       {/* BARRA SUPERIOR DE ACCIONES */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 pb-4">
-        <div className="flex items-center space-x-3">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-800 pb-3">
+        <div className="flex items-center space-x-2.5">
           <Link
             href="/presupuestos"
-            className="p-2 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 transition-colors"
+            className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white transition-colors"
           >
-            <ArrowLeft className="w-5 h-5" />
+            <ArrowLeft className="w-4 h-4" />
           </Link>
           <div>
             <div className="flex items-center space-x-2">
-              <span className="text-xs font-mono font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded">
+              <span className="text-[10px] font-mono font-bold bg-amber-400/20 text-amber-300 px-2 py-0.5 rounded border border-amber-400/30">
                 {budget.budget_number}
               </span>
-              <span className="text-xs text-slate-500">
+              <span className="text-[11px] text-slate-400">
                 {formatDatePY(budget.created_at.split('T')[0])}
               </span>
             </div>
-            <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+            <h1 className="text-base sm:text-xl font-black text-white tracking-tight mt-0.5">
               {budget.title}
             </h1>
           </div>
         </div>
 
+        {/* ACCIONES RÁPIDAS */}
         <div className="flex items-center space-x-2">
           <button
             onClick={handleShareWhatsApp}
-            className="inline-flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all"
-            title="Compartir resumen formal por WhatsApp"
+            className="flex-1 sm:flex-none inline-flex items-center justify-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/20 active:scale-95 transition-all"
+            title="Enviar por WhatsApp"
           >
-            <MessageSquare className="w-4 h-4" />
-            <span className="hidden sm:inline">WhatsApp</span>
-          </button>
-
-          <button
-            onClick={handleDownloadExcel}
-            className="p-2.5 rounded-xl bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 shadow-sm transition-all"
-            title="Descargar Excel Interno (con costos y proveedores)"
-          >
-            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-          </button>
-
-          <button
-            onClick={handleDuplicate}
-            className="p-2.5 rounded-xl bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 shadow-sm transition-all"
-            title="Duplicar este presupuesto"
-          >
-            <Copy className="w-4 h-4" />
+            <Share2 className="w-3.5 h-3.5" />
+            <span>WhatsApp</span>
           </button>
 
           <button
             onClick={handleDownloadPDF}
             disabled={downloading}
-            className="inline-flex items-center space-x-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-[#0F2137] hover:bg-[#1a375a] text-amber-400 border border-amber-400/30 shadow-md transition-all"
-            title="Descargar PDF para el cliente con marco dorado"
+            className="flex-1 sm:flex-none inline-flex items-center justify-center space-x-1.5 px-3.5 py-2 rounded-xl text-xs font-black bg-amber-400 hover:bg-amber-300 text-slate-950 shadow-md shadow-amber-400/20 active:scale-95 transition-all"
+            title="Descargar PDF Dorado para Cliente"
           >
-            <Download className="w-4 h-4" />
-            <span>PDF Cliente (Marco Dorado)</span>
+            <Download className="w-3.5 h-3.5" />
+            <span>{downloading ? 'Generando...' : 'PDF'}</span>
           </button>
 
           <button
             onClick={handleSave}
-            className="inline-flex items-center space-x-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-amber-400 hover:bg-amber-500 text-slate-950 shadow-md transition-all"
+            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-400 border border-slate-700 active:scale-95 transition-all"
+            title="Guardar Cambios"
           >
             <Save className="w-4 h-4" />
-            <span>Guardar Cambios</span>
           </button>
         </div>
       </div>
 
       {isSavedNotice && (
-        <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-bold flex items-center space-x-2 animate-in fade-in">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+        <div className="p-3.5 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center space-x-2 animate-in fade-in">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
           <span>Cambios guardados con éxito.</span>
         </div>
       )}
 
       {/* DETALLES DEL CLIENTE */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+      <div className="bg-[#0F1E33] rounded-3xl border border-slate-800 p-4 shadow-xl grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
         <div>
           <span className="text-slate-400 font-bold uppercase block text-[10px]">Cliente ("PARA:")</span>
-          <strong className="text-sm text-slate-900">{budget.client.name}</strong>
-          <span className="text-slate-500 block">RUC / C.I.: {budget.client.ruc_or_ci}</span>
+          <strong className="text-sm font-black text-white">{budget.client.name}</strong>
+          <span className="text-slate-400 block mt-0.5">RUC / C.I.: {budget.client.ruc_or_ci}</span>
         </div>
         <div>
           <span className="text-slate-400 font-bold uppercase block text-[10px]">Ubicación y Contacto</span>
-          <span className="text-slate-700 block">{budget.client.address}</span>
-          <span className="text-slate-500 block">Tel: {budget.client.phone}</span>
+          <span className="text-slate-200 block">{budget.client.address}</span>
+          <span className="text-slate-400 block">Tel: {budget.client.phone}</span>
         </div>
         <div>
           <span className="text-slate-400 font-bold uppercase block text-[10px]">Condiciones</span>
-          <span className="text-slate-700 block">Validez: {budget.validity_days} días</span>
-          <span className="text-slate-500 block">Entrega: {budget.delivery_terms}</span>
+          <span className="text-slate-200 block">Validez: {budget.validity_days} días</span>
+          <span className="text-slate-400 block">Entrega: {budget.delivery_terms}</span>
         </div>
       </div>
 
       {/* CUENTA BANCARIA PARA TRANSFERENCIA SIPAP */}
-      <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl border border-amber-200 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs">
-        <div className="flex items-start space-x-3">
-          <div className="p-2 bg-amber-200/60 rounded-xl text-amber-900 mt-0.5">
+      <div className="bg-[#0A1626] rounded-3xl border border-amber-400/30 p-3.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs">
+        <div className="flex items-start space-x-2.5">
+          <div className="p-2 bg-amber-400/10 rounded-xl text-amber-400 shrink-0">
             <Landmark className="w-4 h-4" />
           </div>
           <div>
-            <span className="font-bold text-amber-900 block">Datos Bancarios para Cobro / Anticipo (SIPAP):</span>
-            <span className="text-slate-700 font-medium block">
-              {settings.bank_name || 'Banco Itaú'} &bull; Cta: {settings.bank_account_number || '720014589'} &bull; Titular: {settings.bank_account_holder || settings.company_name} &bull; RUC: {settings.ruc}
-              {settings.bank_sipap_alias ? ` (Alias: ${settings.bank_sipap_alias})` : ''}
+            <span className="font-bold text-amber-400 block">Cobro por SIPAP / Bancario:</span>
+            <span className="text-slate-300 font-mono text-[11px] block">
+              {settings.bank_name || 'Banco Itaú'} • Cta: {settings.bank_account_number || '720014589'} • Alias: {settings.bank_sipap_alias || 'construlogica.py'}
             </span>
           </div>
         </div>
         <button
           onClick={handleCopyBank}
-          className="inline-flex items-center space-x-1 px-3 py-1.5 bg-white border border-amber-300 rounded-xl text-xs font-bold text-amber-900 hover:bg-amber-100 shadow-sm shrink-0 transition-colors"
+          className="inline-flex items-center justify-center space-x-1.5 px-3 py-1.5 bg-amber-400 text-slate-950 rounded-xl text-xs font-black active:scale-95 transition-all shrink-0"
         >
-          {copiedBank ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-amber-700" />}
-          <span>{copiedBank ? '¡Copiado!' : 'Copiar Cta Bancaria'}</span>
+          {copiedBank ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+          <span>{copiedBank ? '¡Copiado!' : 'Copiar SIPAP'}</span>
         </button>
       </div>
 
-      {/* TABLA DE ÍTEMS */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="p-4 bg-slate-100 border-b border-slate-200 flex items-center justify-between">
-          <h3 className="font-bold text-sm text-slate-900">
+      {/* LISTA DE ÍTEMS EN TARJETAS MÓVILES */}
+      <div className="bg-[#0F1E33] rounded-3xl border border-slate-800 shadow-xl overflow-hidden">
+        <div className="p-3.5 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
+          <h3 className="font-bold text-xs sm:text-sm text-white">
             Líneas del Presupuesto ({budget.items.length} ítems)
           </h3>
-          <span className="text-xs text-slate-500 font-medium">
-            Precios con IVA 10% incluido
+          <span className="text-[11px] text-amber-400 font-bold">
+            IVA 10% incluido
           </span>
         </div>
 
-        <div className="divide-y divide-slate-100">
+        <div className="divide-y divide-slate-800/80">
           {budget.items.map((item, idx) => (
             <div
               key={item.id}
-              className="p-4 hover:bg-slate-50/60 transition-colors flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+              className="p-3.5 hover:bg-slate-900/50 transition-colors flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs"
             >
               <div className="min-w-0 flex-1 space-y-1">
                 <div className="flex items-center space-x-2">
-                  <span className="text-xs font-mono font-bold text-slate-400">#{idx + 1}</span>
-                  <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded ${
-                    item.item_type === 'material' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-800'
+                  <span className="font-mono text-slate-500 font-bold text-[10px]">#{idx + 1}</span>
+                  <span className={`text-[9px] uppercase font-bold px-1.5 py-0.2 rounded ${
+                    item.item_type === 'material' ? 'bg-blue-500/20 text-blue-300' : 'bg-amber-500/20 text-amber-300'
                   }`}>
                     {item.item_type === 'material' ? 'Material' : 'Mano de Obra'}
                   </span>
-                  <span className="font-bold text-sm text-slate-900">{item.description}</span>
+                  <span className="font-bold text-white text-xs sm:text-sm truncate">{item.description}</span>
                 </div>
-                <div className="flex items-center space-x-4 text-xs text-slate-500">
-                  <span>Costo: <strong>{formatPYG(item.unit_cost_pyg)}</strong></span>
-                  <span>Margen: <strong>{item.margin_pct}%</strong></span>
-                  <span>Unidad: <strong>{item.unit}</strong></span>
+                <div className="flex items-center space-x-3 text-[11px] text-slate-400">
+                  <span>Costo: <strong className="text-slate-300">{formatPYG(item.unit_cost_pyg)}</strong></span>
+                  <span>Unidad: <strong className="text-slate-300">{item.unit}</strong></span>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between sm:justify-end space-x-4 shrink-0">
+              <div className="flex items-center justify-between sm:justify-end space-x-3 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-800/60">
                 <div className="flex flex-col items-center">
-                  <span className="text-[10px] text-slate-400 font-bold uppercase">Cant.</span>
+                  <span className="text-[9px] text-slate-400 font-bold uppercase">Cant.</span>
                   <input
                     type="number"
                     min="0.1"
                     step="any"
                     value={item.quantity}
                     onChange={(e) => handleQuantityChange(idx, parseFloat(e.target.value) || 0)}
-                    className="w-16 px-2 py-1 text-center bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold"
+                    className="w-14 px-1.5 py-1 text-center bg-slate-900 border border-slate-700 rounded-lg text-xs font-bold text-white font-mono"
                   />
                 </div>
 
                 <div className="flex flex-col items-center">
-                  <span className="text-[10px] text-slate-400 font-bold uppercase">Margen %</span>
+                  <span className="text-[9px] text-slate-400 font-bold uppercase">Margen %</span>
                   <input
                     type="number"
                     min="0"
                     max="200"
                     value={item.margin_pct}
                     onChange={(e) => handleMarginChange(idx, parseFloat(e.target.value) || 0)}
-                    className="w-14 px-2 py-1 text-center bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold"
+                    className="w-14 px-1.5 py-1 text-center bg-slate-900 border border-slate-700 rounded-lg text-xs font-bold text-white font-mono"
                   />
                 </div>
 
-                <div className="text-right min-w-[90px]">
-                  <span className="text-[10px] text-slate-400 font-bold uppercase block">Total Venta</span>
-                  <span className="text-sm font-black text-slate-900">
+                <div className="text-right min-w-[85px]">
+                  <span className="text-[9px] text-slate-400 font-bold uppercase block">Venta</span>
+                  <span className="text-xs sm:text-sm font-black text-amber-400">
                     {formatPYG(item.total_sale_pyg)}
                   </span>
                 </div>
 
                 <button
                   onClick={() => handleRemoveItem(idx)}
-                  className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg transition-colors"
+                  className="p-1.5 text-slate-500 hover:text-red-400 rounded-lg transition-colors"
                   title="Eliminar ítem"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -370,24 +350,24 @@ export default function DetallePresupuestoPage() {
       </div>
 
       {/* TOTALES */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 space-y-2 text-xs">
-          <span className="font-bold text-slate-500 uppercase tracking-wider block">Auditoría Interna</span>
-          <div className="flex justify-between">
-            <span>Costo Total de Compra:</span>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="bg-[#0F1E33] p-4 rounded-3xl border border-slate-800 space-y-1.5 text-xs">
+          <span className="font-bold text-slate-400 uppercase tracking-wider block text-[10px]">Auditoría Interna</span>
+          <div className="flex justify-between text-slate-300">
+            <span>Costo Total Compra:</span>
             <strong>{formatPYG(budget.total_cost_pyg)}</strong>
           </div>
-          <div className="flex justify-between text-emerald-700 font-bold pt-2 border-t border-slate-100">
-            <span>Ganancia Bruta Estimada:</span>
+          <div className="flex justify-between text-emerald-400 font-bold pt-1.5 border-t border-slate-800">
+            <span>Ganancia Estimada:</span>
             <span>{formatPYG(budget.total_sale_pyg - budget.total_cost_pyg)}</span>
           </div>
         </div>
 
-        <div className="bg-[#0F2137] text-white p-5 rounded-2xl space-y-2 text-right">
-          <span className="text-xs text-amber-400 uppercase font-bold tracking-wider block">
-            Total General al Cliente (IVA 10% inc.)
+        <div className="bg-gradient-to-br from-amber-500 via-amber-400 to-yellow-400 text-slate-950 p-4 rounded-3xl space-y-1 text-right shadow-lg shadow-amber-500/20">
+          <span className="text-[10px] text-slate-950/80 uppercase font-black tracking-wider block">
+            Total Cliente (IVA 10% inc.)
           </span>
-          <div className="text-3xl font-black text-amber-400">
+          <div className="text-2xl sm:text-3xl font-black text-slate-950">
             {formatPYG(budget.total_sale_pyg)}
           </div>
         </div>
