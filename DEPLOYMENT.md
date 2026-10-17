@@ -90,15 +90,31 @@ Abre en tu navegador `http://localhost:3000`.
 
 ---
 
-## 🗄️ Opción 4: Aprovisionamiento de Base de Datos Supabase (Opcional)
+## 🗄️ Opción 4: Base de Datos Serverless en la Nube (Neon PostgreSQL - Recomendado)
 
-ElectroCotiza funciona **Local-First** por defecto (con almacenamiento persistente en el dispositivo del usuario), pero el código y esquema SQL están 100% listos para conectarse a una base de datos PostgreSQL en la nube:
+ElectroCotiza cuenta con soporte nativo para **Neon Serverless Postgres** (PostgreSQL 18 en la nube con `pg_trgm` y `uuid-ossp`):
 
-1. Ingresa a [Supabase.com](https://supabase.com) y crea un proyecto nuevo.
-   - **Región recomendada para Paraguay:** `sa-east-1` (São Paulo, Brasil) para una latencia menor a 40ms.
-2. Ve al **SQL Editor** en el panel de Supabase:
-   - Abre y copia el contenido de [`supabase/schema.sql`](supabase/schema.sql). Pégalo y ejecútalo. Esto creará todas las tablas, los triggers de precios, el aislamiento RLS y la extensión `pg_trgm`.
-   - Abre y copia el contenido de [`supabase/seed.sql`](supabase/seed.sql). Pégalo y ejecútalo para cargar los proveedores, categorías y catálogo maestro inicial.
+1. **Aprovisionar o Usar Base de Datos Neon Existente:**
+   - Si creas una base de datos nueva en [neon.tech](https://neon.tech), copia el `connection string` (`postgresql://neondb_owner:...`).
+2. **Migración Automática con un Solo Comando:**
+   ```bash
+   node scripts/migrate-neon.mjs
+   ```
+   *Este script ejecuta las 34 sentencias DDL de `schema.sql` y las 10 sentencias de inserción de datos maestros de `seed.sql`.*
+3. **Configuración en Vercel:**
+   - En tu proyecto de Vercel ve a **Settings** -> **Environment Variables**.
+   - Agrega:
+     - **`DATABASE_URL`**: `postgresql://neondb_owner:npg_fs48GgIkHlVe@ep-weathered-lab-b4ub6git-pooler.c-6.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require`
+   - Realiza un nuevo deploy o espera al siguiente push a GitHub. La aplicación conectará automáticamente con tu base de datos Neon Serverless.
+
+---
+
+## 🗄️ Opción 5: Aprovisionamiento en Supabase (Alternativa)
+
+Si prefieres usar Supabase en lugar de Neon:
+
+1. Ingresa a [Supabase.com](https://supabase.com) y crea un proyecto nuevo (`sa-east-1` São Paulo).
+2. Ve al **SQL Editor** en el panel de Supabase y ejecuta [`supabase/schema.sql`](supabase/schema.sql) y [`supabase/seed.sql`](supabase/seed.sql).
 3. En **Project Settings** -> **API**, copia:
    - `Project URL` -> Configúralo como `NEXT_PUBLIC_SUPABASE_URL` en Vercel.
    - `anon public key` -> Configúralo como `NEXT_PUBLIC_SUPABASE_ANON_KEY` en Vercel.

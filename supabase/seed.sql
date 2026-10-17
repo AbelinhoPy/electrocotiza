@@ -260,7 +260,8 @@ INSERT INTO canonical_products (id, organization_id, category_id, sku, name, nor
 ),
 (
     'e0000000-0000-0000-0000-000000000029',
-    'a0000000-0000-0000-0000-000000000006',
+    'a0000000-0000-0000-0000-000000000001',
+    'd0000000-0000-0000-0000-000000000006',
     'ARANDELA-LISA-M10',
     'Arandela Plana Lisa DIN 125 M10 Zincada (10.5 x 20.0 x 2.0)',
     'arandela plana lisa din 125 m10 zincada 10.5 x 20.0 x 2.0',
@@ -358,7 +359,7 @@ INSERT INTO price_history (organization_id, canonical_product_id, provider_id, p
 -- 8. Facturas Registradas en el Sistema con Vinculación a sus Fotos
 INSERT INTO sources (id, organization_id, provider_id, source_type, file_name, file_url, status) VALUES
 (
-    's0000000-0000-0000-0000-000000000001',
+    'fa000000-0000-0000-0000-000000000001',
     'a0000000-0000-0000-0000-000000000001',
     'c0000000-0000-0000-0000-000000000010',
     'invoice_photo',
@@ -367,7 +368,7 @@ INSERT INTO sources (id, organization_id, provider_id, source_type, file_name, f
     'approved'
 ),
 (
-    's0000000-0000-0000-0000-000000000002',
+    'fa000000-0000-0000-0000-000000000002',
     'a0000000-0000-0000-0000-000000000001',
     'c0000000-0000-0000-0000-000000000011',
     'invoice_photo',
@@ -376,7 +377,7 @@ INSERT INTO sources (id, organization_id, provider_id, source_type, file_name, f
     'approved'
 ),
 (
-    's0000000-0000-0000-0000-000000000003',
+    'fa000000-0000-0000-0000-000000000003',
     'a0000000-0000-0000-0000-000000000001',
     'c0000000-0000-0000-0000-000000000010',
     'invoice_photo',
@@ -385,7 +386,7 @@ INSERT INTO sources (id, organization_id, provider_id, source_type, file_name, f
     'approved'
 ),
 (
-    's0000000-0000-0000-0000-000000000004',
+    'fa000000-0000-0000-0000-000000000004',
     'a0000000-0000-0000-0000-000000000001',
     'c0000000-0000-0000-0000-000000000010',
     'invoice_photo',
@@ -399,9 +400,9 @@ INSERT INTO invoices (
     issue_date, payment_condition, subtotal_pyg, iva_10_pyg, total_pyg, status
 ) VALUES
 (
-    'i0000000-0000-0000-0000-000000000001',
+    'fb000000-0000-0000-0000-000000000001',
     'a0000000-0000-0000-0000-000000000001',
-    's0000000-0000-0000-0000-000000000001',
+    'fa000000-0000-0000-0000-000000000001',
     'c0000000-0000-0000-0000-000000000010',
     '001-001-0033088',
     '17343657',
@@ -414,9 +415,9 @@ INSERT INTO invoices (
     'confirmed'
 ),
 (
-    'i0000000-0000-0000-0000-000000000002',
+    'fb000000-0000-0000-0000-000000000002',
     'a0000000-0000-0000-0000-000000000001',
-    's0000000-0000-0000-0000-000000000002',
+    'fa000000-0000-0000-0000-000000000002',
     'c0000000-0000-0000-0000-000000000011',
     '001-001-0040993',
     '18245512',
