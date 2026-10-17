@@ -11,9 +11,9 @@ import type {
 } from '../types.ts';
 
 export const INITIAL_USER: UserProfile = {
-  id: 'usr-abel-k',
-  email: 'construlogicaemprendimientossa@gmail.com',
-  full_name: 'Ing. Abel K. (Jefe de Obra)',
+  id: 'usr-lucas-dure',
+  email: 'lucas.dure@construlogica.com.py',
+  full_name: 'Lucas Duré',
   role: 'owner',
   phone: '+595 983 530890',
   organization_id: 'a0000000-0000-0000-0000-000000000001',
@@ -22,22 +22,6 @@ export const INITIAL_USER: UserProfile = {
 
 export const DEMO_USERS: UserProfile[] = [
   INITIAL_USER,
-  {
-    id: 'usr-electricista-1',
-    email: 'marcos.electricista@construlogica.com.py',
-    full_name: 'Marcos Benítez (Oficial Electricista)',
-    role: 'electrician',
-    phone: '+595 981 443322',
-    organization_id: 'a0000000-0000-0000-0000-000000000001',
-  },
-  {
-    id: 'usr-admin-1',
-    email: 'administracion@construlogica.com.py',
-    full_name: 'Lic. Sofía Duarte (Administración / Compras)',
-    role: 'admin',
-    phone: '+595 21 555-4321',
-    organization_id: 'a0000000-0000-0000-0000-000000000001',
-  },
 ];
 
 export const INITIAL_SETTINGS: Settings = {

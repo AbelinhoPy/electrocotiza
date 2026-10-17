@@ -104,11 +104,11 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2.5">
             <div className="w-10 h-10 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center font-black text-sm shadow-md shadow-amber-400/30">
-              {currentUser?.full_name?.substring(0, 2).toUpperCase() || 'AK'}
+              {currentUser?.full_name?.substring(0, 2).toUpperCase() || 'LD'}
             </div>
             <div>
               <div className="flex items-center space-x-1.5">
-                <span className="text-xs font-semibold text-slate-400">¡Hola, {currentUser?.full_name?.split(' ')[0] || 'Ing. Abel'}! 👋</span>
+                <span className="text-xs font-semibold text-slate-400">¡Hola, {currentUser?.full_name?.split(' ')[0] || 'Lucas'}! 👋</span>
               </div>
               <h1 className="text-sm sm:text-base font-black text-white leading-tight">
                 Construlogica Emprendimientos
