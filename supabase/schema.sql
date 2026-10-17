@@ -50,6 +50,12 @@ CREATE TABLE IF NOT EXISTS settings (
     default_margin_pct NUMERIC(5,2) DEFAULT 30.00,
     price_stale_days INT DEFAULT 60,
     iva_rate_pct NUMERIC(5,2) DEFAULT 10.00,
+    -- Datos Bancarios para Transferencias SIPAP
+    bank_name VARCHAR(100) DEFAULT 'Banco Itaú Paraguay',
+    bank_account_holder VARCHAR(255) DEFAULT 'Construlogica Emprendimientos S.A.',
+    bank_account_number VARCHAR(100) DEFAULT '720014589',
+    bank_account_type VARCHAR(50) DEFAULT 'Cuenta Corriente',
+    bank_sipap_alias VARCHAR(100) DEFAULT 'construlogica.py',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );

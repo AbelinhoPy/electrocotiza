@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Save, RefreshCw, CheckCircle2, ShieldCheck, Sparkles, Download, Upload, Database } from 'lucide-react';
+import { Settings as SettingsIcon, Save, RefreshCw, CheckCircle2, ShieldCheck, Sparkles, Download, Upload, Database, Cloud, HardDrive } from 'lucide-react';
 import { StorageService } from '@/lib/data/storage';
 import { Settings } from '@/lib/types';
+import { isSupabaseConfigured } from '@/lib/supabase/client';
 
 export default function ConfiguracionPage() {
   const [settings, setSettings] = useState<Settings>(StorageService.getSettings());
@@ -80,6 +81,42 @@ export default function ConfiguracionPage() {
           <span>Configuración guardada correctamente.</span>
         </div>
       )}
+
+      {/* ESTADO DE LA BASE DE DATOS */}
+      <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-slate-100 pb-3">
+          <div className="flex items-center space-x-2.5">
+            <Database className="w-5 h-5 text-amber-500" />
+            <h2 className="text-base font-bold text-slate-900">Estado de la Base de Datos</h2>
+          </div>
+          {isSupabaseConfigured() ? (
+            <span className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 self-start sm:self-auto">
+              <Cloud className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Conectado a Supabase (PostgreSQL en la Nube)</span>
+            </span>
+          ) : (
+            <span className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800 border border-blue-200 self-start sm:self-auto">
+              <HardDrive className="w-3.5 h-3.5 text-blue-600" />
+              <span>Modo Local-First (Persistencia en Dispositivo)</span>
+            </span>
+          )}
+        </div>
+
+        <p className="text-xs text-slate-600 leading-relaxed">
+          {isSupabaseConfigured()
+            ? 'La aplicación está sincronizada en tiempo real con tu base de datos PostgreSQL en Supabase, utilizando la extensión pg_trgm para homologación y búsqueda difusa de materiales.'
+            : 'La aplicación opera de manera autónoma con almacenamiento en tu navegador (Local-First), garantizando velocidad instantánea y funcionamiento sin internet en obra. Cuando desees centralizar los datos en equipo en la nube, solo debes agregar NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY en Vercel.'}
+        </p>
+
+        <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs">
+          <div className="space-y-0.5">
+            <span className="font-bold text-slate-800 block">Esquema SQL de Producción Listo:</span>
+            <span className="text-slate-500 block">
+              Tablas, triggers de precios, RLS y las 9 facturas reales paraguayas listas en <code className="font-mono text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">supabase/schema.sql</code> y <code className="font-mono text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">supabase/seed.sql</code>.
+            </span>
+          </div>
+        </div>
+      </div>
 
       <form onSubmit={handleSave} className="space-y-6">
         

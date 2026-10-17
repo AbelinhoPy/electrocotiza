@@ -22,7 +22,8 @@ VALUES (
 -- Configuración de la empresa
 INSERT INTO settings (
     organization_id, company_name, ruc, phone, email, address, logo_url,
-    pdf_gold_border, pdf_validez_dias, default_margin_pct, price_stale_days
+    pdf_gold_border, pdf_validez_dias, default_margin_pct, price_stale_days,
+    bank_name, bank_account_holder, bank_account_number, bank_account_type, bank_sipap_alias
 ) VALUES (
     'a0000000-0000-0000-0000-000000000001',
     'Construlogica Emprendimientos S.A.',
@@ -34,12 +35,21 @@ INSERT INTO settings (
     TRUE,
     15,
     30.00,
-    60
+    60,
+    'Banco Itaú Paraguay',
+    'Construlogica Emprendimientos S.A.',
+    '720014589',
+    'Cuenta Corriente',
+    'construlogica.py'
 ) ON CONFLICT (organization_id) DO UPDATE SET
     ruc = EXCLUDED.ruc,
     phone = EXCLUDED.phone,
     email = EXCLUDED.email,
-    address = EXCLUDED.address;
+    address = EXCLUDED.address,
+    bank_name = EXCLUDED.bank_name,
+    bank_account_holder = EXCLUDED.bank_account_holder,
+    bank_account_number = EXCLUDED.bank_account_number,
+    bank_sipap_alias = EXCLUDED.bank_sipap_alias;
 
 -- 2. Perfil de Usuario Administrador / Electricista Jefe
 INSERT INTO profiles (id, organization_id, email, full_name, role, phone)
