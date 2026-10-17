@@ -70,6 +70,7 @@ export default function IngestaPage() {
   const [rotation, setRotation] = useState<number>(0);
   const [notification, setNotification] = useState<string | null>(null);
   const [isExtracting, setIsExtracting] = useState<boolean>(false);
+  const [previewMap, setPreviewMap] = useState<Record<string, string>>({});
 
   // Estados para Carga Manual Rápida
   const [manualProviderId, setManualProviderId] = useState('');
@@ -224,8 +225,13 @@ export default function IngestaPage() {
         (p.ruc && p.ruc === extractedData.ruc)
       ) || providers[0];
 
+      const invoiceId = `inv-custom-${Date.now()}`;
+      if (compressedUrl) {
+        setPreviewMap(prev => ({ ...prev, [invoiceId]: compressedUrl }));
+      }
+
       const newInvoice: IngestedInvoice = {
-        id: `inv-custom-${Date.now()}`,
+        id: invoiceId,
         provider_id: matchedProvider?.id || 'prov-custom',
         provider_name: extractedData.provider_name || matchedProvider?.name || 'Proveedor Escaneado',
         invoice_number: extractedData.invoice_number || `001-001-${Math.floor(1000000 + Math.random() * 9000000)}`,
@@ -236,7 +242,7 @@ export default function IngestaPage() {
         subtotal_pyg: extractedData.total_pyg || 0,
         iva_10_pyg: Math.round((extractedData.total_pyg || 0) / 11),
         total_pyg: extractedData.total_pyg || 0,
-        file_url: compressedUrl,
+        file_url: '', // Cero consumo de espacio en BD: se guardan los datos estructurados, no la foto
         file_name: file.name,
         status: 'approved',
         created_at: new Date().toISOString(),
@@ -541,11 +547,11 @@ export default function IngestaPage() {
                 </div>
               </div>
 
-              {/* Contenedor de la Imagen */}
+              {/* Contenedor de la Imagen / Datos Estructurados */}
               <div className="relative bg-black/90 rounded-xl overflow-auto max-h-[50vh] sm:max-h-[60vh] min-h-[300px] flex items-center justify-center p-2 border border-slate-800 shadow-inner">
-                {selectedInvoice?.file_url ? (
+                {previewMap[selectedInvoice?.id || ''] || selectedInvoice?.file_url ? (
                   <img
-                    src={selectedInvoice.file_url}
+                    src={previewMap[selectedInvoice?.id || ''] || selectedInvoice?.file_url}
                     alt="Factura original"
                     style={{ 
                       transform: `scale(${zoomLevel}) rotate(${rotation}deg)`, 
@@ -554,9 +560,12 @@ export default function IngestaPage() {
                     className="transition-transform duration-150 max-w-full rounded-lg shadow-2xl"
                   />
                 ) : (
-                  <div className="text-center text-slate-500 text-xs p-6 space-y-2">
-                    <FileText className="w-8 h-8 text-slate-600 mx-auto" />
-                    <p>Factura sin fotografía adjunta.</p>
+                  <div className="text-center text-slate-400 text-xs p-6 space-y-2">
+                    <Database className="w-9 h-9 text-amber-400 mx-auto animate-pulse" />
+                    <p className="font-bold text-white text-sm">Datos Estructurados en Neon DB</p>
+                    <p className="text-[11px] text-slate-400 max-w-[260px] mx-auto">
+                      La foto fue procesada y los materiales, RUC, timbrado y precios unitarios están guardados en la base de datos sin saturar espacio.
+                    </p>
                   </div>
                 )}
               </div>
