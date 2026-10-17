@@ -2,7 +2,7 @@
 ### Sistema Inteligente de Homologación de Materiales y Presupuestos Eléctricos para Paraguay
 *Desarrollado a medida para contratistas y profesionales de **Construlogica Emprendimientos S.A.***
 
-[![CI Pipeline](https://github.com/construlogica/electrocotiza/actions/workflows/ci.yml/badge.svg)](https://github.com/construlogica/electrocotiza/actions)
+[![CI Pipeline](https://github.com/AbelinhoPy/electrocotiza/actions/workflows/ci.yml/badge.svg)](https://github.com/AbelinhoPy/electrocotiza/actions)
 ![Next.js 14](https://img.shields.io/badge/Next.js-14.2-black?style=flat&logo=next.js)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue?style=flat&logo=typescript)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.4-38bdf8?style=flat&logo=tailwind-css)
@@ -96,7 +96,7 @@ El sistema viene preentrenado con **9 facturas reales** de las principales ferre
 
 ```bash
 # 1. Clonar el repositorio
-git clone https://github.com/tu-usuario/electrocotiza.git
+git clone https://github.com/AbelinhoPy/electrocotiza.git
 cd electrocotiza
 
 # 2. Instalar dependencias
