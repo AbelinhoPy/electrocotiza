@@ -24,11 +24,8 @@ jobs:
       - name: 📦 Instalar dependencias
         run: npm ci
 
-      - name: 🧪 Ejecutar Suite de Pruebas de Negocio (23 tests)
-        run: node tests/verification.mjs
-
-      - name: 📄 Auditar Confidencialidad de PDF (Cero fugas de proveedores)
-        run: node tests/test-pdf-export.mjs
+      - name: 🧪 Ejecutar Suite de Pruebas y Auditoría (23 tests + PDF)
+        run: npm test
 
       - name: 🚀 Compilar Proyecto Next.js en Producción
         run: npm run build
