@@ -1,90 +1,143 @@
-# ElectroCotiza ⚡🇵🇾
+# ElectroCotiza ⚡
+### Sistema Inteligente de Homologación de Materiales y Presupuestos Eléctricos para Paraguay
+*Desarrollado a medida para contratistas y profesionales de **Construlogica Emprendimientos S.A.***
 
-**Plataforma Web Responsive y PWA de Cotizaciones y Homologación de Precios Eléctricos para Contratistas y Electricistas de Paraguay.**  
-Caso de uso inicial: **Construlogica Emprendimientos S.A.** (Minga Guazú / Ciudad del Este / Asunción).
+[![CI Pipeline](https://github.com/construlogica/electrocotiza/actions/workflows/ci.yml/badge.svg)](https://github.com/construlogica/electrocotiza/actions)
+![Next.js 14](https://img.shields.io/badge/Next.js-14.2-black?style=flat&logo=next.js)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue?style=flat&logo=typescript)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.4-38bdf8?style=flat&logo=tailwind-css)
+![PWA Ready](https://img.shields.io/badge/PWA-Mobile--First-emerald?style=flat&logo=pwa)
+![Moneda](https://img.shields.io/badge/Moneda-Guaran%C3%ADes_(%E2%82%B2)-amber?style=flat)
+
+---
+
+## 🎯 ¿Qué problema resuelve ElectroCotiza?
+
+Un electricista o contratista en Paraguay hace presupuestos todos los días y pierde valiosas horas:
+- Buscando precios en tickets viejos arrugados, remisiones y mensajes de WhatsApp.
+- El mismo producto se llama diferente en cada ferretería (`BARRAM. COBRE 20X3MM` vs `Planchuela de cobre 20x3mm` vs `Barra Cobre 20x3 Enerluz`).
+- Confecciona cotizaciones en Excel o papel que filtran por error el margen o los proveedores de compra.
+- Trabaja con precios viejos que se comió la inflación.
+
+**ElectroCotiza centraliza todo el flujo en el celular o la computadora:**
+1. **Homologa automáticamente** los nombres de materiales con búsqueda difusa (trigram similarity).
+2. **Compara precios** en tiempo real entre ferreterías de Asunción y Alto Paraná (Enerluz, Fixopar, Electro System, Electropar, Luminotecnia, Condel, Centro de los Compresores).
+3. **Escanea facturas reales** (por foto o carga manual) garantizando que la suma matemática sea 100% exacta.
+4. **Arma presupuestos ejecutivos en menos de 5 minutos** con cálculo automático de IVA 10% y margen de ganancia.
+5. **Exporta PDFs de alta gama con marco dorado (`#D4AF37`)** con estricta confidencialidad (cero nombres de ferreterías ni costos de compra).
+6. **Comparte por WhatsApp en 1 toque** y permite al cliente transferir el anticipo por SIPAP con un botón de copiado.
 
 ---
 
 ## 🚀 Características Principales
 
-1. **Catálogo Maestro y Motor de Homologación (`pg_trgm` / Trigramas):**
-   - Unifica las distintas denominaciones de materiales utilizadas por ferreterías paraguayas (ej: *"BARRAM. COBRE 20X3MM 3/4X1/8"*, *"Barra Cobre 20x3 Enerluz"*, *"Planchuela de cobre 20x3mm"* unificadas bajo un único producto maestro).
-   - Coincidencia difusa en tiempo real con cálculo de porcentaje de similitud.
-   - Confirmación humana con un toque para recordar nuevos alias permanentemente.
+### 1. Catálogo Maestro y Homologador Inteligente
+- Algoritmo de similitud semántica y trigramas (`pg_trgm`) adaptado a las abreviaturas eléctricas del mercado paraguayo (`barram`, `cond`, `sx`, `din`, `disy`, etc.).
+- Aprendizaje continuo: cuando vinculas un nuevo alias de ferretería, el sistema lo recuerda para siempre.
 
-2. **Validación Humana (Human-in-the-Loop):**
-   - Pantalla dividida con visor de zoom para fotos de facturas o tickets (KuDE).
-   - Verificación matemática instantánea: compara la sumatoria de las líneas extraídas contra el total declarado en la factura con alertas visuales de discrepancia.
-   - Viene pre-cargado con **5 facturas reales de Construlogica Emprendimientos S.A.** (ENERLUZ S.A., FIXOPAR S.A. y ELECTRO SYSTEM / ABB).
+### 2. Comparador de Precios y Detector de Precios Viejos
+- Muestra el proveedor más económico para cada material y la variación porcentual ($\% \Delta$).
+- Si una cotización tiene más de **60 días**, el sistema muestra una advertencia visual amarilla/roja para evitar pérdidas comerciales.
 
-3. **Buscador Comparativo de Precios:**
-   - Visualiza dónde conviene comprar cada material (precios más baratos destacados).
-   - **Alerta de Precios Viejos:** Distintivo de advertencia si la cotización supera los **60 días** (evita pérdidas por inflación o variaciones de mercado).
-   - Historial de precios por proveedor y fecha.
+### 3. Escáner Dual de Facturas (Foto Inteligente + Carga Manual)
+- **Modo Foto / Celular:** Visor en pantalla dividida con controles táctiles de zoom y rotación para verificar comprobantes en obra.
+- **Modo Carga Manual:** Ideal para tickets térmicos arrugados o de bajo contraste (como Fixopar o ferreterías barriales).
+- **Balance Matemático Estricto:** Compara en tiempo real la sumatoria de las líneas contra el total facturado. Bloquea la confirmación si no balancea.
 
-4. **Creador Rápido de Presupuestos (< 5 minutos en obra):**
-   - Diseñado mobile-first para operarse desde el teléfono en la obra.
-   - Selector rápido de materiales con sugerencia de precios (Último precio pagado o más barato).
-   - Plantillas de mano de obra (boca, global, día de trabajo).
-   - Margen de ganancia configurable tanto a nivel global como por ítem.
-   - Cálculos en **Guaraníes (PYG, ₲) sin decimales** con **IVA 10% incluido**.
+### 4. Presupuestos en < 5 Minutos (Mobile-First)
+- Selector de materiales con precio sugerido (último pagado, más barato o promedio).
+- Plantillas de mano de obra paraguaya (por boca, por día, global de tablero, acometida).
+- Control de margen global o individual por línea.
 
-5. **Exportador Dual:**
-   - **PDF Ejecutivo para el Cliente:**
-     - Membrete oficial de **Construlogica Emprendimientos S.A.**
-     - **Marco exterior dorado elegante (`#D4AF37`)**.
-     - Ítems numerados con descripción, unidad, cantidad y precio unitario con IVA.
-     - **Confidencialidad absoluta:** Cero filtración de costos de compra ni nombres de proveedores.
-     - Leyenda legal obligatoria: *"Son Guaraníes [Monto en letras] (IVA 10% incluido en el valor)"*.
-     - Condiciones de entrega, forma de pago, validez de 15 días y pie de confidencialidad.
-   - **Excel Interno de Auditoría:**
-     - Desglose con costos unitarios reales, proveedor de referencia, margen aplicado, ganancia bruta estimada y subtotales.
+### 5. Exportación Dual y Venta por WhatsApp
+- **PDF de Cliente:** Membrete de Construlogica, marco dorado exterior, destinatario `"PARA:"`, leyenda legal en guaraníes en letras (*"Son Guaraníes [en letras] (IVA 10% incluido)"*), validez de 15 días y pie de confidencialidad. **Cero filtración de costos o proveedores.**
+- **Excel Interno:** Hoja de cálculo con costos reales, proveedores, márgenes y utilidad neta estimada.
+- **WhatsApp Directo:** Envío del resumen formal en un clic al número del cliente.
+- **Datos Bancarios SIPAP:** Copiado instantáneo al portapapeles de la cuenta bancaria para pago de anticipo.
 
----
+### 6. Sistema Anti-Pérdidas de Datos (Backup & Restore JSON)
+- Exportación e importación de toda la base de datos (precios, clientes, facturas, presupuestos) en formato JSON en un solo clic. Permite migrar entre teléfonos y PCs sin riesgo de perder información.
 
-## 🛠️ Tecnologías
-
-- **Frontend:** Next.js 14+ (App Router), React 18, TypeScript, Tailwind CSS, Lucide Icons.
-- **PWA:** Web App Manifest para instalación en Android / iPhone.
-- **Base de Datos:** PostgreSQL 15+ / Supabase con extensión `pg_trgm`, triggers y funciones RPC.
-- **Exportación:** jsPDF + AutoTable (PDF vectorizado) y XLSX (Excel).
-- **Persistencia Local-First:** Funciona de inmediato con datos reales en memoria / LocalStorage y cuenta con esquemas SQL para conexión a Supabase Cloud.
+### 7. Login y Control de Roles
+- Perfiles de acceso rápido para demostración inmediata:
+  - **Dueño / Jefe de Obra** (*Ing. Abel K.*): Control total de costos, márgenes y configuración fiscal.
+  - **Electricista / Técnico**: Creación de presupuestos y carga de facturas en campo.
+  - **Administrador**: Gestión de usuarios y respaldos.
 
 ---
 
-## 📦 Instalación y Ejecución Local
+## 🏗️ Facturas Reales de Paraguay Incluidas
 
-1. **Instalar dependencias:**
-   ```bash
-   npm install
-   ```
+El sistema viene preentrenado con **9 facturas reales** de las principales ferreterías y distribuidores de Paraguay:
 
-2. **Iniciar servidor de desarrollo:**
-   ```bash
-   npm run dev
-   ```
-   Abre [http://localhost:3000](http://localhost:3000) en tu navegador (o desde el celular en la misma red Wi-Fi).
-
-3. **Compilar para producción:**
-   ```bash
-   npm run build
-   npm start
-   ```
+1. **ELECTRO SYSTEM S.R.L. #005-001-0004935** (3.822.735 ₲): Disyuntores de potencia Chint 400A/630A, TIs 800/5A y ventilación.
+2. **CENTRO DE LOS COMPRESORES S.A. #001-001-0041585** (338.500 ₲): Tubos y accesorios Top Fusion PN20 25mm.
+3. **CENTRO DE LOS COMPRESORES S.A. #001-001-0041554** (60.000 ₲): Uniones de termofusión 32mm.
+4. **ELECTROPAR S.A. #015-002-0022390** (465.600 ₲): Rollo 200m Cable Multifilar Atóxico 2.0 mm² Nexans (Tierra).
+5. **ENERLUZ S.A. #001-001-0033088** (1.650.000 ₲): Barras de cobre electrolítico 20x3mm 3/4" x 1/8".
+6. **FIXOPAR S.R.L. #001-001-0040993** (67.100 ₲): Bulones acero 8.8 M10x25, tuercas y arandelas DIN 125.
+7. **ENERLUZ S.A. #001-001-0032949** (3.372.704 ₲): Barras de cobre 30x5mm, 50x10mm y microrruptores.
+8. **ENERLUZ S.A. #001-001-0033018** (1.500.831 ₲): Barras 30x10mm y cablecanales ranurados PVC 40x50mm.
+9. **ELECTRO SYSTEM / ABB #PED-4235575** (536.176 ₲): Disyuntores tripolares DIN SH203 3P 20A y 25A.
 
 ---
 
-## 🗄️ Esquema de Base de Datos (Supabase / PostgreSQL)
+## 💻 Pila Tecnológica
 
-- **DDL Completo:** [`supabase/schema.sql`](supabase/schema.sql)
-- **Datos Semilla (Seed con Facturas Reales):** [`supabase/seed.sql`](supabase/seed.sql)
-
-Para desplegar en Supabase:
-1. Crea un proyecto en [supabase.com](https://supabase.com).
-2. Ve al **SQL Editor** y ejecuta [`supabase/schema.sql`](supabase/schema.sql).
-3. Luego ejecuta [`supabase/seed.sql`](supabase/seed.sql).
+- **Frontend:** Next.js 14 (App Router), TypeScript, Tailwind CSS, Lucide Icons.
+- **PWA / Móvil:** Responsive Mobile-First, Web App Manifest, Service-Worker ready.
+- **Generadores:** `jspdf` + `jspdf-autotable` (PDF ejecutivo) y `xlsx` (Excel interno).
+- **Base de Datos & Búsqueda:** Arquitectura Local-First con persistencia `localStorage`, lista para conectarse a **Supabase (PostgreSQL 15+)** con extensión `pg_trgm`.
+- **Despliegue:** Optimizado para **Vercel** (`vercel.json`) y contenedores **Docker** (`Dockerfile` multi-stage).
 
 ---
 
-## 📄 Archivo de Decisiones
+## 🛠️ Instalación y Uso Local
 
-Consulta [`DECISIONES.md`](DECISIONES.md) para conocer las justificaciones técnicas y de producto adoptadas en el proyecto.
+```bash
+# 1. Clonar el repositorio
+git clone https://github.com/tu-usuario/electrocotiza.git
+cd electrocotiza
+
+# 2. Instalar dependencias
+npm install
+
+# 3. Iniciar el servidor de desarrollo
+npm run dev
+
+# 4. Abrir en el navegador
+# http://localhost:3000
+```
+
+---
+
+## 🧪 Pruebas Automatizadas
+
+El proyecto incluye una suite completa de pruebas de lógica de negocio y de confidencialidad:
+
+```bash
+# Ejecutar suite de pruebas de negocio (23 tests: cálculos, IVA 10%, balance matemático y trigramas)
+node tests/verification.mjs
+
+# Ejecutar auditoría de confidencialidad en PDF (verifica 0% de filtración de costos o proveedores)
+node tests/test-pdf-export.mjs
+
+# Compilación de producción
+npm run build
+```
+
+---
+
+## 🚀 Despliegue en Producción
+
+Consulta la guía detallada en [DEPLOYMENT.md](DEPLOYMENT.md) para desplegar en:
+- **Vercel:** Importación en 1 clic desde GitHub (Recomendado).
+- **Docker / VPS:** Contenedor optimizado y listo para correr en cualquier nube.
+- **Supabase:** Base de datos PostgreSQL con migraciones en `supabase/schema.sql` y `supabase/seed.sql`.
+
+---
+
+## 📄 Licencia y Derechos
+
+Propiedad de **Construlogica Emprendimientos S.A.** - Asunción, Paraguay.  
+Todos los derechos reservados.
