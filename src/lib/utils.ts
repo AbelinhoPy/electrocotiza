@@ -25,7 +25,8 @@ export function formatPYG(amount: number): string {
 export function formatDatePY(dateString: string): string {
   if (!dateString) return '-';
   try {
-    const parts = dateString.split('-');
+    const clean = dateString.split('T')[0];
+    const parts = clean.split('-');
     if (parts.length === 3) {
       return `${parts[2]}/${parts[1]}/${parts[0]}`;
     }
