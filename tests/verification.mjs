@@ -67,9 +67,9 @@ const raw3 = 'A2 DISY TERM DIN 3P 020A 6KA SH203-ABB';
 const abbProduct = INITIAL_PRODUCTS.find(p => p.sku === 'DISY-ABB-3P-20A');
 assert(abbProduct.aliases.includes(raw3), `El disyuntor ABB tiene el alias exacto registrado`);
 
-// 4. Integridad de las 5 Facturas Reales Cargadas
-console.log('\n--- 4. Validación Matemática de las 5 Facturas Reales ---');
-assert(INITIAL_INVOICES.length === 5, `Existen 5 facturas reales registradas en el sistema`);
+// 4. Integridad de las 9 Facturas Reales Cargadas
+console.log('\n--- 4. Validación Matemática de las 9 Facturas Reales ---');
+assert(INITIAL_INVOICES.length === 9, `Existen 9 facturas reales registradas en el sistema (actual: ${INITIAL_INVOICES.length})`);
 
 for (const inv of INITIAL_INVOICES) {
   const sumLines = inv.items.reduce((acc, it) => acc + it.total_pyg, 0);

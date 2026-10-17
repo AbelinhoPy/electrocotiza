@@ -8,6 +8,8 @@ import {
   INITIAL_PRODUCTS,
   INITIAL_PROVIDERS,
   INITIAL_SETTINGS,
+  INITIAL_USER,
+  DEMO_USERS,
 } from './initial-data';
 import {
   Budget,
@@ -19,6 +21,7 @@ import {
   PriceRecord,
   Provider,
   Settings,
+  UserProfile,
 } from '../types';
 import { matchScore, normalizeText } from '../fuzzy';
 
@@ -30,6 +33,7 @@ const STORAGE_KEYS = {
   CATEGORIES: 'electrocotiza_categories_v1',
   INVOICES: 'electrocotiza_invoices_v1',
   SETTINGS: 'electrocotiza_settings_v1',
+  USER: 'electrocotiza_current_user_v1',
 };
 
 function getLocal<T>(key: string, fallback: T): T {
@@ -52,6 +56,21 @@ function setLocal<T>(key: string, data: T): void {
 }
 
 export const StorageService = {
+  // --- AUTH & USUARIOS ---
+  getCurrentUser(): UserProfile {
+    return getLocal(STORAGE_KEYS.USER, INITIAL_USER);
+  },
+  setCurrentUser(user: UserProfile): void {
+    setLocal(STORAGE_KEYS.USER, user);
+  },
+  logout(): void {
+    if (typeof window === 'undefined') return;
+    localStorage.removeItem(STORAGE_KEYS.USER);
+  },
+  getUsers(): UserProfile[] {
+    return DEMO_USERS;
+  },
+
   // --- SETTINGS ---
   getSettings(): Settings {
     return getLocal(STORAGE_KEYS.SETTINGS, INITIAL_SETTINGS);
@@ -288,6 +307,52 @@ export const StorageService = {
 
     this.saveBudget(duplicated);
     return duplicated;
+  },
+
+  // --- BACKUP & RESTORE (ANTI-PÉRDIDAS) ---
+  exportBackupJSON(): string {
+    const backupData = {
+      app: 'ElectroCotiza',
+      version: '1.0',
+      exported_at: new Date().toISOString(),
+      user: this.getCurrentUser(),
+      settings: this.getSettings(),
+      products: this.getProducts(),
+      budgets: this.getBudgets(),
+      clients: this.getClients(),
+      providers: this.getProviders(),
+      categories: this.getCategories(),
+      invoices: this.getInvoices(),
+    };
+    return JSON.stringify(backupData, null, 2);
+  },
+
+  importBackupJSON(jsonString: string): { success: boolean; message: string; countBudgets?: number } {
+    try {
+      const data = JSON.parse(jsonString);
+      if (!data || typeof data !== 'object') {
+        throw new Error('Formato de archivo inválido.');
+      }
+      if (data.settings) setLocal(STORAGE_KEYS.SETTINGS, data.settings);
+      if (data.products && Array.isArray(data.products)) setLocal(STORAGE_KEYS.PRODUCTS, data.products);
+      if (data.budgets && Array.isArray(data.budgets)) setLocal(STORAGE_KEYS.BUDGETS, data.budgets);
+      if (data.clients && Array.isArray(data.clients)) setLocal(STORAGE_KEYS.CLIENTS, data.clients);
+      if (data.providers && Array.isArray(data.providers)) setLocal(STORAGE_KEYS.PROVIDERS, data.providers);
+      if (data.categories && Array.isArray(data.categories)) setLocal(STORAGE_KEYS.CATEGORIES, data.categories);
+      if (data.invoices && Array.isArray(data.invoices)) setLocal(STORAGE_KEYS.INVOICES, data.invoices);
+      if (data.user) setLocal(STORAGE_KEYS.USER, data.user);
+
+      return {
+        success: true,
+        message: 'Copia de seguridad restaurada con éxito.',
+        countBudgets: data.budgets?.length || 0,
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        message: `Error al restaurar: ${err.message || 'Archivo dañado o no compatible.'}`,
+      };
+    }
   },
 
   // --- RESET TO FACTORY / SEED ---

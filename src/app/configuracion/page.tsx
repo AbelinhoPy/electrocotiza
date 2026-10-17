@@ -1,17 +1,49 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Save, RefreshCw, CheckCircle2, ShieldCheck, Sparkles } from 'lucide-react';
+import { Settings as SettingsIcon, Save, RefreshCw, CheckCircle2, ShieldCheck, Sparkles, Download, Upload, Database } from 'lucide-react';
 import { StorageService } from '@/lib/data/storage';
 import { Settings } from '@/lib/types';
 
 export default function ConfiguracionPage() {
   const [settings, setSettings] = useState<Settings>(StorageService.getSettings());
   const [saved, setSaved] = useState(false);
+  const [backupNotice, setBackupNotice] = useState<string | null>(null);
 
   useEffect(() => {
     setSettings(StorageService.getSettings());
   }, []);
+
+  const handleExportBackup = () => {
+    const jsonStr = StorageService.exportBackupJSON();
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ElectroCotiza_Respaldo_${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setBackupNotice('Copia de seguridad descargada exitosamente en formato JSON.');
+    setTimeout(() => setBackupNotice(null), 4000);
+  };
+
+  const handleImportBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      const res = StorageService.importBackupJSON(content);
+      if (res.success) {
+        alert(`${res.message} (${res.countBudgets} presupuestos cargados). La aplicación se reiniciará con tus datos.`);
+        window.location.reload();
+      } else {
+        alert(res.message);
+      }
+    };
+    reader.readAsText(file);
+  };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -230,6 +262,52 @@ export default function ConfiguracionPage() {
                 IVA General 10% de Paraguay (DNIT). Los precios al cliente siempre lo incluyen.
               </p>
             </div>
+          </div>
+        </div>
+
+        {/* RESPALDO Y PROTECCIÓN DE DATOS (LECCIÓN ANTI-PÉRDIDAS) */}
+        <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+            <h2 className="text-base font-bold text-slate-900 flex items-center space-x-2">
+              <Database className="w-4 h-4 text-emerald-600" />
+              <span>Respaldo y Copias de Seguridad (Anti-Pérdidas de Datos)</span>
+            </h2>
+            <span className="text-[10px] font-bold uppercase bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded">
+              Protegido
+            </span>
+          </div>
+
+          <p className="text-xs text-slate-600 leading-relaxed">
+            Nunca pierdas tus cotizaciones, facturas ni precios cargados. Puedes descargar una copia de seguridad completa en cualquier momento o transferir tus datos a otro teléfono celular o computadora.
+          </p>
+
+          {backupNotice && (
+            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 font-bold flex items-center space-x-2 animate-in fade-in">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              <span>{backupNotice}</span>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+            <button
+              type="button"
+              onClick={handleExportBackup}
+              className="inline-flex items-center justify-center space-x-2 px-4 py-3 bg-slate-900 hover:bg-slate-800 text-amber-400 font-bold text-xs rounded-xl shadow-sm transition-all"
+            >
+              <Download className="w-4 h-4" />
+              <span>Descargar Respaldo Completo (.JSON)</span>
+            </button>
+
+            <label className="inline-flex items-center justify-center space-x-2 px-4 py-3 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-bold text-xs rounded-xl shadow-sm cursor-pointer transition-all">
+              <Upload className="w-4 h-4 text-slate-500" />
+              <span>Restaurar desde Respaldo (.JSON)</span>
+              <input
+                type="file"
+                accept=".json"
+                onChange={handleImportBackup}
+                className="hidden"
+              />
+            </label>
           </div>
         </div>
 

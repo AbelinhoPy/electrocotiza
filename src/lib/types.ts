@@ -1,14 +1,32 @@
 export type Role = 'owner' | 'admin' | 'electrician' | 'assistant';
 
+export interface UserProfile {
+  id: string;
+  email: string;
+  full_name: string;
+  role: Role;
+  phone: string;
+  organization_id: string;
+  avatar_url?: string;
+}
+
 export interface Organization {
   id: string;
   name: string;
+  fantasy_name?: string;
   ruc: string;
   phone: string;
   email: string;
   city: string;
+  department: string;
   address: string;
   logo_url: string;
+  // Cuentas bancarias para presupuestos
+  bank_name?: string;
+  bank_account_holder?: string;
+  bank_account_number?: string;
+  bank_account_type?: string;
+  bank_sipap_alias?: string;
 }
 
 export interface Provider {
@@ -155,11 +173,21 @@ export interface IngestedInvoice {
 
 export interface Settings {
   company_name: string;
+  fantasy_name: string;
   ruc: string;
   phone: string;
   email: string;
+  city: string;
+  department: string;
   address: string;
   logo_url: string;
+  // Cuentas Bancarias
+  bank_name: string;
+  bank_account_holder: string;
+  bank_account_number: string;
+  bank_account_type: string;
+  bank_sipap_alias: string;
+  // Parámetros de Exportación
   pdf_gold_border: boolean;
   pdf_validez_dias: number;
   pdf_condicion_pago_defecto: string;

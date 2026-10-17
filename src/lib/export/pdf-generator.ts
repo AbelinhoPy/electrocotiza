@@ -1,8 +1,8 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { Budget, Settings } from '../types';
-import { formatDatePY, formatPYG } from '../utils';
-import { numberToWordsPYG } from '../number-to-words';
+import type { Budget, Settings } from '../types.ts';
+import { formatDatePY, formatPYG } from '../utils.ts';
+import { numberToWordsPYG } from '../number-to-words.ts';
 
 export async function generateClientPDF(budget: Budget, settings: Settings): Promise<jsPDF> {
   // A4: 210mm x 297mm
@@ -93,7 +93,8 @@ export async function generateClientPDF(budget: Budget, settings: Settings): Pro
     formatPYG(item.total_sale_pyg),
   ]);
 
-  autoTable(doc, {
+  const applyAutoTable = (autoTable as any)?.default || autoTable || (doc as any).autoTable;
+  applyAutoTable(doc, {
     startY: currentY,
     margin: { left: margin + 4, right: margin + 4 },
     head: [['#', 'DESCRIPCIÓN DE MATERIALES Y TRABAJOS', 'UNIDAD', 'CANT.', 'PRECIO UNIT. (IVA INC.)', 'TOTAL']],

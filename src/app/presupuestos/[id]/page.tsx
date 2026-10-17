@@ -15,7 +15,11 @@ import {
   Building2, 
   Calculator,
   CheckCircle2,
-  Copy
+  Copy,
+  MessageSquare,
+  Landmark,
+  Check,
+  Share2
 } from 'lucide-react';
 import { StorageService } from '@/lib/data/storage';
 import { Budget, BudgetItem, Settings } from '@/lib/types';
@@ -117,11 +121,51 @@ export default function DetallePresupuestoPage() {
     generateInternalExcel(budget);
   };
 
+  const [copiedBank, setCopiedBank] = useState(false);
+
   const handleDuplicate = () => {
     const copy = StorageService.duplicateBudget(budget.id);
     if (copy) {
       router.push(`/presupuestos/${copy.id}`);
     }
+  };
+
+  const handleCopyBank = () => {
+    const bankText = `*DATOS PARA TRANSFERENCIA BANCARIA (SIPAP)*\n` +
+      `Banco: ${settings.bank_name || 'Banco Itaú Paraguay'}\n` +
+      `Titular: ${settings.bank_account_holder || settings.company_name}\n` +
+      `RUC: ${settings.ruc}\n` +
+      `Cuenta N°: ${settings.bank_account_number}\n` +
+      `Tipo: ${settings.bank_account_type || 'Cuenta Corriente'}\n` +
+      (settings.bank_sipap_alias ? `Alias SIPAP: ${settings.bank_sipap_alias}\n` : '');
+
+    navigator.clipboard.writeText(bankText);
+    setCopiedBank(true);
+    setTimeout(() => setCopiedBank(false), 3000);
+  };
+
+  const handleShareWhatsApp = () => {
+    const phone = budget.client.phone ? budget.client.phone.replace(/[^0-9]/g, '') : '';
+    const itemsSummary = budget.items
+      .slice(0, 5)
+      .map((it, idx) => `  ${idx + 1}. ${it.description} (${it.quantity} ${it.unit})`)
+      .join('\n');
+    const moreText = budget.items.length > 5 ? `\n  ... y ${budget.items.length - 5} ítems más.` : '';
+
+    const text = `*PRESUPUESTO ELÉCTRICO ${budget.budget_number}*\n` +
+      `*De:* ${settings.company_name} (Ing. Abel K.)\n` +
+      `*Para:* ${budget.client.name}\n` +
+      `*Trabajo:* ${budget.title}\n\n` +
+      `*Resumen:* \n${itemsSummary}${moreText}\n\n` +
+      `💰 *Total Presupuesto:* ${formatPYG(budget.total_sale_pyg)} (IVA 10% incluido)\n` +
+      `⏱️ *Validez:* ${budget.validity_days} días\n` +
+      `📦 *Entrega:* ${budget.delivery_terms}\n` +
+      `💳 *Pago:* ${budget.payment_terms}\n\n` +
+      `_Presupuesto oficial emitido por ElectroCotiza. Le enviamos el PDF formal detallado con membrete y marco de garantía._`;
+
+    const encoded = encodeURIComponent(text);
+    const url = phone ? `https://wa.me/${phone}?text=${encoded}` : `https://wa.me/?text=${encoded}`;
+    window.open(url, '_blank');
   };
 
   return (
@@ -152,6 +196,15 @@ export default function DetallePresupuestoPage() {
         </div>
 
         <div className="flex items-center space-x-2">
+          <button
+            onClick={handleShareWhatsApp}
+            className="inline-flex items-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all"
+            title="Compartir resumen formal por WhatsApp"
+          >
+            <MessageSquare className="w-4 h-4" />
+            <span className="hidden sm:inline">WhatsApp</span>
+          </button>
+
           <button
             onClick={handleDownloadExcel}
             className="p-2.5 rounded-xl bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 shadow-sm transition-all"
@@ -212,6 +265,29 @@ export default function DetallePresupuestoPage() {
           <span className="text-slate-700 block">Validez: {budget.validity_days} días</span>
           <span className="text-slate-500 block">Entrega: {budget.delivery_terms}</span>
         </div>
+      </div>
+
+      {/* CUENTA BANCARIA PARA TRANSFERENCIA SIPAP */}
+      <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl border border-amber-200 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs">
+        <div className="flex items-start space-x-3">
+          <div className="p-2 bg-amber-200/60 rounded-xl text-amber-900 mt-0.5">
+            <Landmark className="w-4 h-4" />
+          </div>
+          <div>
+            <span className="font-bold text-amber-900 block">Datos Bancarios para Cobro / Anticipo (SIPAP):</span>
+            <span className="text-slate-700 font-medium block">
+              {settings.bank_name || 'Banco Itaú'} &bull; Cta: {settings.bank_account_number || '720014589'} &bull; Titular: {settings.bank_account_holder || settings.company_name} &bull; RUC: {settings.ruc}
+              {settings.bank_sipap_alias ? ` (Alias: ${settings.bank_sipap_alias})` : ''}
+            </span>
+          </div>
+        </div>
+        <button
+          onClick={handleCopyBank}
+          className="inline-flex items-center space-x-1 px-3 py-1.5 bg-white border border-amber-300 rounded-xl text-xs font-bold text-amber-900 hover:bg-amber-100 shadow-sm shrink-0 transition-colors"
+        >
+          {copiedBank ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-amber-700" />}
+          <span>{copiedBank ? '¡Copiado!' : 'Copiar Cta Bancaria'}</span>
+        </button>
       </div>
 
       {/* TABLA DE ÍTEMS */}

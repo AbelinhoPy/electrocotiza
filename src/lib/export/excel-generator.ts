@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { Budget } from '../types';
+import type { Budget } from '../types.ts';
 
 export function generateInternalExcel(budget: Budget): void {
   // Filas para la hoja de cálculo interna

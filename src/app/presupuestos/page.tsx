@@ -13,7 +13,8 @@ import {
   Calendar, 
   User, 
   CheckCircle2, 
-  Clock 
+  Clock,
+  MessageSquare
 } from 'lucide-react';
 import { StorageService } from '@/lib/data/storage';
 import { Budget } from '@/lib/types';
@@ -57,6 +58,23 @@ export default function PresupuestosPage() {
     if (copy) {
       loadBudgets();
     }
+  };
+
+  const handleShareWhatsApp = (b: Budget) => {
+    const phone = b.client.phone ? b.client.phone.replace(/[^0-9]/g, '') : '';
+    const text = `*PRESUPUESTO ELÉCTRICO ${b.budget_number}*\n` +
+      `*De:* Construlogica Emprendimientos S.A. (Ing. Abel K.)\n` +
+      `*Para:* ${b.client.name}\n` +
+      `*Trabajo:* ${b.title}\n\n` +
+      `💰 *Total Presupuesto:* ${formatPYG(b.total_sale_pyg)} (IVA 10% incluido)\n` +
+      `⏱️ *Validez:* ${b.validity_days} días\n` +
+      `📦 *Entrega:* ${b.delivery_terms}\n` +
+      `💳 *Pago:* ${b.payment_terms}\n\n` +
+      `_Presupuesto oficial emitido por ElectroCotiza._`;
+
+    const encoded = encodeURIComponent(text);
+    const url = phone ? `https://wa.me/${phone}?text=${encoded}` : `https://wa.me/?text=${encoded}`;
+    window.open(url, '_blank');
   };
 
   const handleDelete = (id: string) => {
@@ -173,6 +191,14 @@ export default function PresupuestosPage() {
                   title="Descargar Excel Interno (con costos y proveedores)"
                 >
                   <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                </button>
+
+                <button
+                  onClick={() => handleShareWhatsApp(b)}
+                  className="p-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 transition-colors"
+                  title="Compartir por WhatsApp al cliente"
+                >
+                  <MessageSquare className="w-4 h-4" />
                 </button>
 
                 <button

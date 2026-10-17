@@ -72,13 +72,43 @@ Este documento registra todas las decisiones clave de arquitectura, diseño, mod
 
 ---
 
-## 3. Próximos Pasos de Implementación
+## 3. Decisiones de Producto Derivadas de Lecciones Previas (Hotel & Obra Real)
 
-- **Fase 1 (MVP Inmediato):**
-  - Esquema de base de datos SQL con migraciones y datos seed paraguayos.
-  - Setup del proyecto Next.js + Tailwind + TypeScript.
-  - Catálogo canónico, homologador con `pg_trgm`, buscador de materiales y comparador de proveedores.
-  - Creador interactivo de presupuestos con cálculo de margen.
-  - Generador de PDF con marco dorado y Excel interno.
-- **Fase 2:** Integración de extracción OCR / multimodal de facturas con pantalla dividida (Human-in-the-Loop) y conectores web.
-- **Fase 3:** Stock básico de sobrantes de obra y reportes analíticos de compras.
+### 7. Sistema de Autenticación y Control de Roles (`/login`)
+- Acceso con perfiles preconfigurados de 1-toque para demostración instantánea:
+  - **Dueño / Jefe de Obra (Owner):** Control total de costos, márgenes, configuración fiscal y datos bancarios.
+  - **Electricista / Técnico de Obra:** Acceso para carga de facturas en campo y confección de presupuestos; visualización de costos pero sin permisos de alteración de membrete fiscal.
+  - **Administrador:** Gestión de usuarios y backup.
+- Sesión persistente en `localStorage` con avatar, cargo y teléfono corporativo de Construlogica.
+
+### 8. Módulo Dedicado "Mi Empresa" y Datos Bancarios SIPAP (`/empresa`)
+- Sección independiente para configurar la identidad corporativa de Construlogica Emprendimientos S.A.:
+  - Razón Social, RUC, Representante Legal, teléfonos, email y dirección física en Asunción.
+  - Cuentas bancarias para transferencias SIPAP (Banco, N° de Cuenta, Tipo de Cuenta, Titular, RUC, y Alias SIPAP).
+- **Previsualización en tiempo real del membrete oficial del presupuesto** para que el contratista vea exactamente cómo recibirá el documento su cliente.
+
+### 9. Escáner Dual de Facturas (Foto Inteligente + Carga Manual) (`/ingesta`)
+- Reconocimiento de que en ferreterías paraguayas los tickets son con frecuencia impresos en papel térmico de bajo contraste o están arrugados/manchados (ej. Fixopar, ferreterías de barrio).
+- **Modo 1 (Foto / Cámara de celular):** Visor interactivo lado a lado (pantalla dividida) con rotación y zoom, extracción estructurada de tabla y confirmación de ítems línea por línea.
+- **Modo 2 (Carga Manual Rápida):** Interfaz ágil tipo hoja de cálculo para digitar líneas de comprobantes deteriorados.
+- **Regla de Oro Anti-Errores (Balance Matemático):** El sistema calcula en vivo la suma de las líneas de la factura y la compara contra el total declarado. Si existe una diferencia mayor a 10 Gs, bloquea la aprobación y muestra el desbalance en rojo para evitar distorsiones en los costos promedios.
+
+### 10. Respaldo Total y Compartir por WhatsApp (Anti-Pérdidas)
+- **Copia de Seguridad JSON:** Exportación e importación en 1 clic de toda la base de datos (empresa, clientes, presupuestos, catálogo, facturas y proveedores) para migrar entre celulares y PCs sin riesgo de pérdida de datos.
+- **Compartir por WhatsApp Directo:** Botón de un toque en el listado y detalle de presupuestos que abre WhatsApp con el mensaje estructurado profesional (monto en letras, IVA incluido, validez, condiciones y resumen de ítems).
+- **Copiado de Cta Bancaria SIPAP:** Botón en el presupuesto para copiar los datos bancarios al portapapeles y pegarlos en el chat de WhatsApp con el cliente para el cobro del anticipo.
+
+---
+
+## 4. Estado de Avance y Roadmap
+
+- **Fase 1 (Completada al 100%):**
+  - Next.js 14 + Tailwind CSS + PWA Ready.
+  - Catálogo canónico con homologador trigram y 9 facturas reales paraguayas (Enerluz, Fixopar, Electro System, Centro de los Compresores, Electropar).
+  - Creador de presupuestos < 5 min con cálculo de márgenes e IVA 10%.
+  - Generador de PDF con marco dorado (`#D4AF37`) y Excel interno sin fugas de proveedores.
+  - Login con 3 roles y módulo "Mi Empresa".
+  - Escáner dual (foto + manual) con balanceo matemático estricto.
+  - Respaldo/Restauración JSON y compartición directa por WhatsApp.
+- **Fase 2:** Conexión con Vision Multimodal (Gemini API) en backend para extracción autónoma de comprobantes.
+- **Fase 3:** Control de inventario de sobrantes de obra y reportes de gastos por proyecto.
