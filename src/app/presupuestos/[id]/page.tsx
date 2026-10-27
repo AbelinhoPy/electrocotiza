@@ -10,20 +10,27 @@ import {
   Copy, 
   Save, 
   Trash2, 
-  FileSpreadsheet, 
   CheckCircle2, 
-  Landmark, 
+  Briefcase, 
+  Layers, 
+  FileText, 
+  Lock, 
+  AlertTriangle, 
   Check, 
   Plus, 
-  Building2,
-  Eye,
-  FileText
+  Edit3, 
+  RefreshCw 
 } from 'lucide-react';
 import { StorageService } from '@/lib/data/storage';
-import { Budget, BudgetItem } from '@/lib/types';
+import { Budget, BudgetItem, QuoteStatus, UserProfile } from '@/lib/types';
 import { formatPYG, formatDatePY } from '@/lib/utils';
-import { generateClientPDF } from '@/lib/export/pdf-generator';
-import { generateInternalExcel } from '@/lib/export/excel-generator';
+import { PricingEngine } from '@/lib/pricing-engine';
+import { 
+  generateClientPDF, 
+  generateMaterialsListPDF, 
+  generatePriceListPDF, 
+  generateInternalCostSummaryPDF 
+} from '@/lib/export/pdf-generator';
 
 export default function PresupuestoDetallePage() {
   const params = useParams();
@@ -31,13 +38,18 @@ export default function PresupuestoDetallePage() {
   const id = params?.id as string;
 
   const [budget, setBudget] = useState<Budget | null>(null);
-  const [downloading, setDownloading] = useState(false);
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [permissions, setPermissions] = useState(StorageService.getUserPermissions(null));
+  
+  const [downloadingType, setDownloadingType] = useState<string | null>(null);
   const [isSavedNotice, setIsSavedNotice] = useState(false);
   const [copiedBank, setCopiedBank] = useState(false);
+  const [revisionNotes, setRevisionNotes] = useState('');
+  const [showRevisionModal, setShowRevisionModal] = useState(false);
 
   const settings = StorageService.getSettings();
 
-  useEffect(() => {
+  const loadData = () => {
     if (id) {
       const b = StorageService.getBudgetById(id);
       if (b) {
@@ -46,330 +58,291 @@ export default function PresupuestoDetallePage() {
         router.push('/presupuestos');
       }
     }
+  };
+
+  useEffect(() => {
+    const user = StorageService.getCurrentUser();
+    setCurrentUser(user);
+    setPermissions(StorageService.getUserPermissions(user));
+    loadData();
   }, [id, router]);
 
   if (!budget) {
     return (
-      <div className="min-h-[50vh] flex items-center justify-center text-xs text-slate-400">
+      <div className="min-h-[50vh] flex items-center justify-center text-xs text-slate-500 font-semibold">
         Cargando presupuesto...
       </div>
     );
   }
 
-  const handleQuantityChange = (index: number, newQty: number) => {
-    const updatedItems = [...budget.items];
-    const it = updatedItems[index];
-    const qty = Math.max(0, newQty);
-    const saleUnit = Math.round(it.unit_cost_pyg * (1 + it.margin_pct / 100));
-    it.quantity = qty;
-    it.unit_sale_pyg = saleUnit;
-    it.total_sale_pyg = Math.round(saleUnit * qty);
+  // Cálculos reactivos mediante el Motor Centralizado
+  const totals = PricingEngine.calculateQuoteTotals(budget, budget.default_iva_rate_pct || 10);
 
-    const totalCost = updatedItems.reduce((acc, curr) => acc + (curr.unit_cost_pyg * curr.quantity), 0);
-    const totalSale = updatedItems.reduce((acc, curr) => acc + curr.total_sale_pyg, 0);
-
-    setBudget({
-      ...budget,
-      items: updatedItems,
-      total_cost_pyg: totalCost,
-      total_sale_pyg: totalSale,
-      updated_at: new Date().toISOString(),
-    });
-  };
-
-  const handleMarginChange = (index: number, newMargin: number) => {
-    const updatedItems = [...budget.items];
-    const it = updatedItems[index];
-    const margin = Math.max(0, newMargin);
-    const saleUnit = Math.round(it.unit_cost_pyg * (1 + margin / 100));
-    it.margin_pct = margin;
-    it.unit_sale_pyg = saleUnit;
-    it.total_sale_pyg = Math.round(saleUnit * it.quantity);
-
-    const totalCost = updatedItems.reduce((acc, curr) => acc + (curr.unit_cost_pyg * curr.quantity), 0);
-    const totalSale = updatedItems.reduce((acc, curr) => acc + curr.total_sale_pyg, 0);
-
-    setBudget({
-      ...budget,
-      items: updatedItems,
-      total_cost_pyg: totalCost,
-      total_sale_pyg: totalSale,
-      updated_at: new Date().toISOString(),
-    });
-  };
-
-  const handleRemoveItem = (index: number) => {
-    const updatedItems = budget.items.filter((_, i) => i !== index);
-    const totalCost = updatedItems.reduce((acc, curr) => acc + (curr.unit_cost_pyg * curr.quantity), 0);
-    const totalSale = updatedItems.reduce((acc, curr) => acc + curr.total_sale_pyg, 0);
-
-    setBudget({
-      ...budget,
-      items: updatedItems,
-      total_cost_pyg: totalCost,
-      total_sale_pyg: totalSale,
-      updated_at: new Date().toISOString(),
-    });
-  };
-
-  const handleSave = () => {
-    StorageService.saveBudget(budget);
-    setIsSavedNotice(true);
-    setTimeout(() => setIsSavedNotice(false), 3000);
-  };
-
-  const handleDownloadPDF = async () => {
-    try {
-      setDownloading(true);
-      const doc = await generateClientPDF(budget, settings);
-      doc.save(`Presupuesto_${budget.budget_number}_${budget.client.name.replace(/\s+/g, '_')}.pdf`);
-    } catch (err) {
-      console.error('Error generando PDF', err);
-      alert('Error al generar PDF del presupuesto.');
-    } finally {
-      setDownloading(false);
+  const handleStatusChange = (newStatus: QuoteStatus) => {
+    const res = StorageService.changeBudgetStatus(budget.id, newStatus);
+    if (res.success) {
+      loadData();
+    } else {
+      alert(res.message);
     }
   };
 
-  const handleDownloadExcel = () => {
-    generateInternalExcel(budget);
+  const handleEmitRevision = () => {
+    const rev = StorageService.emitBudgetRevision(budget.id, revisionNotes || 'Revisión técnica actualizada');
+    if (rev) {
+      loadData();
+      setShowRevisionModal(false);
+      setRevisionNotes('');
+      alert(`¡Revisión ${rev.revision_number} emitida inmutable con éxito!`);
+    }
+  };
+
+  const handleConvertToProject = () => {
+    if (budget.status !== 'accepted') {
+      const confirmApprove = confirm('Para convertir a proyecto, el presupuesto debe estar Aprobado. ¿Deseas aprobarlo ahora?');
+      if (!confirmApprove) return;
+    }
+
+    const res = StorageService.convertBudgetToProject(
+      budget.id, 
+      currentUser?.full_name || 'Ramón Fleitas', 
+      new Date().toISOString().split('T')[0]
+    );
+
+    if (res.success && res.project) {
+      alert(res.message);
+      router.push(`/proyectos/${res.project.id}`);
+    } else {
+      alert(res.message);
+    }
+  };
+
+  const handleDownloadPDF = async (type: 'client' | 'materials' | 'pricelist' | 'internal') => {
+    try {
+      setDownloadingType(type);
+      let doc;
+      let filename = '';
+
+      if (type === 'client') {
+        doc = await generateClientPDF(budget, settings);
+        filename = `Presupuesto_${budget.budget_number}_${budget.client.name.replace(/\s+/g, '_')}.pdf`;
+      } else if (type === 'materials') {
+        doc = await generateMaterialsListPDF(budget, settings);
+        filename = `Lista_Materiales_${budget.budget_number}_Panol.pdf`;
+      } else if (type === 'pricelist') {
+        doc = await generatePriceListPDF(budget, settings);
+        filename = `Tarifario_Comercial_${budget.budget_number}.pdf`;
+      } else if (type === 'internal') {
+        if (!permissions.canViewCosts) {
+          alert('No tienes permiso para ver los costos internos.');
+          return;
+        }
+        doc = await generateInternalCostSummaryPDF(budget, settings);
+        filename = `Resumen_Costos_${budget.budget_number}_CONFIDENCIAL.pdf`;
+      }
+
+      if (doc) doc.save(filename);
+    } catch (err) {
+      console.error('Error al generar PDF', err);
+      alert('Error al generar el documento PDF.');
+    } finally {
+      setDownloadingType(null);
+    }
   };
 
   const handleShareWhatsApp = () => {
-    const phone = budget.client.phone ? budget.client.phone.replace(/[^0-9]/g, '') : '';
-    const text = `*PRESUPUESTO ELÉCTRICO ${budget.budget_number}* ⚡\n` +
-      `*De:* Construlogica Emprendimientos S.A.\n` +
-      `*Cliente:* ${budget.client.name}\n` +
-      `*Obra / Trabajo:* ${budget.title}\n\n` +
-      `💰 *Total Presupuesto:* ${formatPYG(budget.total_sale_pyg)} (IVA 10% incluido)\n` +
-      `⏱️ *Validez:* ${budget.validity_days} días\n` +
-      `📦 *Entrega:* ${budget.delivery_terms}\n` +
-      `💳 *Pago:* ${budget.payment_terms}\n\n` +
-      `_Presupuesto oficial emitido por ElectroCotiza._`;
-
-    const encoded = encodeURIComponent(text);
-    const url = phone ? `https://wa.me/${phone}?text=${encoded}` : `https://wa.me/?text=${encoded}`;
-    window.open(url, '_blank');
+    const text = `*PRESUPUESTO ELÉCTRICO* ⚡\n*Construlogica Emprendimientos S.A.*\n\n*Cliente:* ${budget.client.name}\n*Comprobante:* ${budget.budget_number}\n*Total:* ${formatPYG(budget.total_sale_pyg)} (IVA 10% incluido)\n*Validez:* ${budget.validity_days || 15} días\n\n_Generado profesionalmente por ElectroCotiza._`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   };
 
   const handleCopyBank = () => {
-    const text = `*DATOS PARA TRANSFERENCIA BANCARIA (SIPAP)*\n` +
-      `Banco: ${settings.bank_name || 'Banco Itaú Paraguay'}\n` +
-      `Titular: ${settings.bank_account_holder || settings.company_name}\n` +
-      `Cta Cte (₲): ${settings.bank_account_number || '720014589'}\n` +
-      `RUC: ${settings.ruc}\n` +
-      `Alias SIPAP: ${settings.bank_sipap_alias || 'construlogica.py'}\n` +
-      `Ref: Presupuesto ${budget.budget_number}`;
+    const text = `*DATOS PARA TRANSFERENCIA BANCARIA (SIPAP)*\nBanco: ${settings.bank_name}\nTitular: ${settings.bank_account_holder}\nCta Cte: ${settings.bank_account_number}\nRUC: ${settings.ruc}\nAlias SIPAP: ${settings.bank_sipap_alias}`;
     navigator.clipboard.writeText(text);
     setCopiedBank(true);
     setTimeout(() => setCopiedBank(false), 3000);
   };
 
   return (
-    <div className="max-w-md sm:max-w-2xl lg:max-w-5xl mx-auto px-3.5 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
+    <div className="max-w-6xl mx-auto px-3 sm:px-6 py-6 space-y-6">
       
-      {/* BARRA SUPERIOR DE ACCIONES */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-800 pb-3">
-        <div className="flex items-center space-x-2.5">
-          <Link
-            href="/presupuestos"
-            className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
+      {/* BARRA SUPERIOR */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+        <div className="flex items-center space-x-3">
+          <Link href="/presupuestos" className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg">
+            <ArrowLeft className="w-5 h-5" />
           </Link>
           <div>
             <div className="flex items-center space-x-2">
-              <span className="text-[10px] font-mono font-bold bg-amber-400/20 text-amber-300 px-2 py-0.5 rounded border border-amber-400/30">
+              <span className="font-mono font-bold text-xs bg-blue-100 text-blue-900 px-2 py-0.5 rounded border border-blue-200">
                 {budget.budget_number}
               </span>
-              <span className="text-[11px] text-slate-400">
-                {formatDatePY(budget.created_at.split('T')[0])}
+              {budget.current_revision ? (
+                <span className="text-[10px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-mono font-bold">
+                  Rev. {budget.current_revision}
+                </span>
+              ) : null}
+              <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                {budget.status}
               </span>
             </div>
-            <h1 className="text-base sm:text-xl font-black text-white tracking-tight mt-0.5">
+            <h1 className="text-lg sm:text-xl font-bold text-slate-900 mt-0.5">
               {budget.title}
             </h1>
           </div>
         </div>
 
-        {/* ACCIONES RÁPIDAS */}
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-2 shrink-0">
           <button
+            type="button"
             onClick={handleShareWhatsApp}
-            className="flex-1 sm:flex-none inline-flex items-center justify-center space-x-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/20 active:scale-95 transition-all"
-            title="Enviar por WhatsApp"
+            className="px-3 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg flex items-center space-x-1"
           >
             <Share2 className="w-3.5 h-3.5" />
             <span>WhatsApp</span>
           </button>
 
           <button
-            onClick={handleDownloadPDF}
-            disabled={downloading}
-            className="flex-1 sm:flex-none inline-flex items-center justify-center space-x-1.5 px-3.5 py-2 rounded-xl text-xs font-black bg-amber-400 hover:bg-amber-300 text-slate-950 shadow-md shadow-amber-400/20 active:scale-95 transition-all"
-            title="Descargar PDF Dorado para Cliente"
+            type="button"
+            onClick={handleConvertToProject}
+            className="px-3.5 py-1.5 text-xs font-bold text-white bg-blue-900 hover:bg-blue-800 rounded-lg shadow-sm flex items-center space-x-1"
           >
-            <Download className="w-3.5 h-3.5" />
-            <span>{downloading ? 'Generando...' : 'PDF'}</span>
+            <Briefcase className="w-3.5 h-3.5 text-amber-400" />
+            <span>Convertir a Proyecto</span>
+          </button>
+        </div>
+      </div>
+
+      {/* TARJETAS RESUMEN ECONÓMICO */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+          <span className="text-[11px] text-slate-400 font-bold block">Cliente</span>
+          <span className="font-bold text-slate-900 text-sm block truncate">{budget.client.name}</span>
+          <span className="text-[10px] text-slate-500 font-mono">{budget.client.ruc_or_ci || 'S/ RUC'}</span>
+        </div>
+
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+          <span className="text-[11px] text-slate-400 font-bold block">Subtotal Neto</span>
+          <span className="font-bold font-mono text-slate-800 text-sm block">{formatPYG(totals.subtotalNet)}</span>
+          <span className="text-[10px] text-slate-500">Base Imponible</span>
+        </div>
+
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+          <span className="text-[11px] text-slate-400 font-bold block">IVA 10% Liquidado</span>
+          <span className="font-bold font-mono text-slate-800 text-sm block">{formatPYG(totals.ivaAmount)}</span>
+          <span className="text-[10px] text-slate-500">Impuesto al Valor Agregado</span>
+        </div>
+
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+          <span className="text-[11px] text-slate-400 font-bold block">Total Facturado</span>
+          <span className="font-black font-mono text-blue-900 text-base block">{formatPYG(totals.totalSale)}</span>
+          <span className="text-[10px] text-slate-500">{budget.items?.length || 0} ítems</span>
+        </div>
+      </div>
+
+      {/* BOTONES DE DESCARGA DE LOS 4 DOCUMENTOS PDF */}
+      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
+        <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wide">
+          Descarga Oficial de Documentos:
+        </h3>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+          <button
+            type="button"
+            disabled={downloadingType !== null}
+            onClick={() => handleDownloadPDF('client')}
+            className="p-3 text-left border border-amber-300 bg-amber-50 hover:bg-amber-100 rounded-lg flex items-center space-x-2"
+          >
+            <Download className="w-4 h-4 text-amber-700 shrink-0" />
+            <div>
+              <span className="font-bold text-xs text-amber-900 block">Presupuesto Comercial</span>
+              <span className="text-[10px] text-amber-800/80">Ejecutivo para Cliente</span>
+            </div>
           </button>
 
           <button
-            onClick={handleSave}
-            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-400 border border-slate-700 active:scale-95 transition-all"
-            title="Guardar Cambios"
+            type="button"
+            disabled={downloadingType !== null}
+            onClick={() => handleDownloadPDF('materials')}
+            className="p-3 text-left border border-slate-200 bg-slate-50 hover:bg-slate-100 rounded-lg flex items-center space-x-2"
           >
-            <Save className="w-4 h-4" />
+            <Layers className="w-4 h-4 text-slate-700 shrink-0" />
+            <div>
+              <span className="font-bold text-xs text-slate-900 block">Lista de Materiales</span>
+              <span className="text-[10px] text-slate-500">Para Pañol y Compras</span>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            disabled={downloadingType !== null}
+            onClick={() => handleDownloadPDF('pricelist')}
+            className="p-3 text-left border border-slate-200 bg-slate-50 hover:bg-slate-100 rounded-lg flex items-center space-x-2"
+          >
+            <FileText className="w-4 h-4 text-slate-700 shrink-0" />
+            <div>
+              <span className="font-bold text-xs text-slate-900 block">Tarifario de Precios</span>
+              <span className="text-[10px] text-slate-500">Ítems con Precios Unitarios</span>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            disabled={downloadingType !== null || !permissions.canViewCosts}
+            onClick={() => handleDownloadPDF('internal')}
+            className={`p-3 text-left border rounded-lg flex items-center space-x-2 ${
+              permissions.canViewCosts ? 'border-red-200 bg-red-50 hover:bg-red-100 text-red-950' : 'opacity-50 cursor-not-allowed bg-slate-100 border-slate-200'
+            }`}
+          >
+            <Lock className="w-4 h-4 text-red-600 shrink-0" />
+            <div>
+              <span className="font-bold text-xs block">Hoja Costos y Rentabilidad</span>
+              <span className="text-[10px] opacity-75">Confidencial Interno</span>
+            </div>
           </button>
         </div>
       </div>
 
-      {isSavedNotice && (
-        <div className="p-3.5 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center space-x-2 animate-in fade-in">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-          <span>Cambios guardados con éxito.</span>
-        </div>
-      )}
-
-      {/* DETALLES DEL CLIENTE */}
-      <div className="bg-[#0F1E33] rounded-3xl border border-slate-800 p-4 shadow-xl grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-        <div>
-          <span className="text-slate-400 font-bold uppercase block text-[10px]">Cliente ("PARA:")</span>
-          <strong className="text-sm font-black text-white">{budget.client.name}</strong>
-          <span className="text-slate-400 block mt-0.5">RUC / C.I.: {budget.client.ruc_or_ci}</span>
-        </div>
-        <div>
-          <span className="text-slate-400 font-bold uppercase block text-[10px]">Ubicación y Contacto</span>
-          <span className="text-slate-200 block">{budget.client.address}</span>
-          <span className="text-slate-400 block">Tel: {budget.client.phone}</span>
-        </div>
-        <div>
-          <span className="text-slate-400 font-bold uppercase block text-[10px]">Condiciones</span>
-          <span className="text-slate-200 block">Validez: {budget.validity_days} días</span>
-          <span className="text-slate-400 block">Entrega: {budget.delivery_terms}</span>
-        </div>
-      </div>
-
-      {/* CUENTA BANCARIA PARA TRANSFERENCIA SIPAP */}
-      <div className="bg-[#0A1626] rounded-3xl border border-amber-400/30 p-3.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs">
-        <div className="flex items-start space-x-2.5">
-          <div className="p-2 bg-amber-400/10 rounded-xl text-amber-400 shrink-0">
-            <Landmark className="w-4 h-4" />
-          </div>
-          <div>
-            <span className="font-bold text-amber-400 block">Cobro por SIPAP / Bancario:</span>
-            <span className="text-slate-300 font-mono text-[11px] block">
-              {settings.bank_name || 'Banco Itaú'} • Cta: {settings.bank_account_number || '720014589'} • Alias: {settings.bank_sipap_alias || 'construlogica.py'}
-            </span>
-          </div>
-        </div>
-        <button
-          onClick={handleCopyBank}
-          className="inline-flex items-center justify-center space-x-1.5 px-3 py-1.5 bg-amber-400 text-slate-950 rounded-xl text-xs font-black active:scale-95 transition-all shrink-0"
-        >
-          {copiedBank ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-          <span>{copiedBank ? '¡Copiado!' : 'Copiar SIPAP'}</span>
-        </button>
-      </div>
-
-      {/* LISTA DE ÍTEMS EN TARJETAS MÓVILES */}
-      <div className="bg-[#0F1E33] rounded-3xl border border-slate-800 shadow-xl overflow-hidden">
-        <div className="p-3.5 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
-          <h3 className="font-bold text-xs sm:text-sm text-white">
-            Líneas del Presupuesto ({budget.items.length} ítems)
+      {/* TABLA DE ÍTEMS DEL PRESUPUESTO */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-4 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-bold text-slate-900 uppercase">
+            Detalle de Conceptos y Materiales
           </h3>
-          <span className="text-[11px] text-amber-400 font-bold">
-            IVA 10% incluido
+          <span className="text-xs text-slate-500">
+            Validez: {budget.validity_days || 15} días corridos • Plazo: {budget.delivery_terms}
           </span>
         </div>
 
-        <div className="divide-y divide-slate-800/80">
-          {budget.items.map((item, idx) => (
-            <div
-              key={item.id}
-              className="p-3.5 hover:bg-slate-900/50 transition-colors flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs"
-            >
-              <div className="min-w-0 flex-1 space-y-1">
-                <div className="flex items-center space-x-2">
-                  <span className="font-mono text-slate-500 font-bold text-[10px]">#{idx + 1}</span>
-                  <span className={`text-[9px] uppercase font-bold px-1.5 py-0.2 rounded ${
-                    item.item_type === 'material' ? 'bg-blue-500/20 text-blue-300' : 'bg-amber-500/20 text-amber-300'
-                  }`}>
-                    {item.item_type === 'material' ? 'Material' : 'Mano de Obra'}
-                  </span>
-                  <span className="font-bold text-white text-xs sm:text-sm truncate">{item.description}</span>
-                </div>
-                <div className="flex items-center space-x-3 text-[11px] text-slate-400">
-                  <span>Costo: <strong className="text-slate-300">{formatPYG(item.unit_cost_pyg)}</strong></span>
-                  <span>Unidad: <strong className="text-slate-300">{item.unit}</strong></span>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between sm:justify-end space-x-3 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-800/60">
-                <div className="flex flex-col items-center">
-                  <span className="text-[9px] text-slate-400 font-bold uppercase">Cant.</span>
-                  <input
-                    type="number"
-                    min="0.1"
-                    step="any"
-                    value={item.quantity}
-                    onChange={(e) => handleQuantityChange(idx, parseFloat(e.target.value) || 0)}
-                    className="w-14 px-1.5 py-1 text-center bg-slate-900 border border-slate-700 rounded-lg text-xs font-bold text-white font-mono"
-                  />
-                </div>
-
-                <div className="flex flex-col items-center">
-                  <span className="text-[9px] text-slate-400 font-bold uppercase">Margen %</span>
-                  <input
-                    type="number"
-                    min="0"
-                    max="200"
-                    value={item.margin_pct}
-                    onChange={(e) => handleMarginChange(idx, parseFloat(e.target.value) || 0)}
-                    className="w-14 px-1.5 py-1 text-center bg-slate-900 border border-slate-700 rounded-lg text-xs font-bold text-white font-mono"
-                  />
-                </div>
-
-                <div className="text-right min-w-[85px]">
-                  <span className="text-[9px] text-slate-400 font-bold uppercase block">Venta</span>
-                  <span className="text-xs sm:text-sm font-black text-amber-400">
-                    {formatPYG(item.total_sale_pyg)}
-                  </span>
-                </div>
-
-                <button
-                  onClick={() => handleRemoveItem(idx)}
-                  className="p-1.5 text-slate-500 hover:text-red-400 rounded-lg transition-colors"
-                  title="Eliminar ítem"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* TOTALES */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div className="bg-[#0F1E33] p-4 rounded-3xl border border-slate-800 space-y-1.5 text-xs">
-          <span className="font-bold text-slate-400 uppercase tracking-wider block text-[10px]">Auditoría Interna</span>
-          <div className="flex justify-between text-slate-300">
-            <span>Costo Total Compra:</span>
-            <strong>{formatPYG(budget.total_cost_pyg)}</strong>
-          </div>
-          <div className="flex justify-between text-emerald-400 font-bold pt-1.5 border-t border-slate-800">
-            <span>Ganancia Estimada:</span>
-            <span>{formatPYG(budget.total_sale_pyg - budget.total_cost_pyg)}</span>
-          </div>
-        </div>
-
-        <div className="bg-gradient-to-br from-amber-500 via-amber-400 to-yellow-400 text-slate-950 p-4 rounded-3xl space-y-1 text-right shadow-lg shadow-amber-500/20">
-          <span className="text-[10px] text-slate-950/80 uppercase font-black tracking-wider block">
-            Total Cliente (IVA 10% inc.)
-          </span>
-          <div className="text-2xl sm:text-3xl font-black text-slate-950">
-            {formatPYG(budget.total_sale_pyg)}
-          </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs text-left">
+            <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+              <tr>
+                <th className="py-2.5 px-3 w-10 text-center">#</th>
+                <th className="py-2.5 px-3">Descripción de Material / Trabajo</th>
+                <th className="py-2.5 px-2 w-16 text-center">Unidad</th>
+                <th className="py-2.5 px-2 w-20 text-right">Cantidad</th>
+                <th className="py-2.5 px-3 w-32 text-right">Precio Unit. (IVA Inc.)</th>
+                <th className="py-2.5 px-3 w-36 text-right">Total (Gs)</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {budget.items.map((it, idx) => (
+                <tr key={it.id} className="hover:bg-slate-50">
+                  <td className="py-2.5 px-3 text-center font-mono text-slate-400">{it.hierarchical_number || idx + 1}</td>
+                  <td className="py-2.5 px-3 font-semibold text-slate-900">
+                    {it.description}
+                    {it.provider_name && permissions.canViewCosts && (
+                      <span className="ml-2 text-[10px] text-slate-400 font-mono">[{it.provider_name}]</span>
+                    )}
+                  </td>
+                  <td className="py-2.5 px-2 text-center text-slate-600 font-semibold">{it.unit}</td>
+                  <td className="py-2.5 px-2 text-right font-mono font-bold text-slate-800">{it.quantity}</td>
+                  <td className="py-2.5 px-3 text-right font-mono text-slate-700">{formatPYG(it.unit_sale_pyg)}</td>
+                  <td className="py-2.5 px-3 text-right font-mono font-bold text-blue-900">{formatPYG(it.total_sale_pyg)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
 

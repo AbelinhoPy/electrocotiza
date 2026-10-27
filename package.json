@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "tsx tests/verification.mjs && tsx tests/test-pdf-export.mjs"
+    "test:pricing": "tsx tests/pricing-engine.test.mjs",
+    "test": "tsx tests/verification.mjs && tsx tests/test-pdf-export.mjs && tsx tests/pricing-engine.test.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.2.0",
@@ -20,7 +21,8 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tailwind-merge": "^2.5.4",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^20.17.0",

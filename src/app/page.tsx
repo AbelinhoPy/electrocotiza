@@ -9,50 +9,77 @@ import {
   FileText, 
   TrendingDown, 
   CheckCircle2, 
-  ArrowRight,
-  ShieldAlert,
-  Download,
-  Building,
-  Sparkles,
-  Receipt,
-  Camera,
-  Share2,
-  Copy,
-  Zap,
-  HardHat,
-  Cloud,
-  ExternalLink
+  ArrowRight, 
+  ShieldAlert, 
+  Download, 
+  Building, 
+  Sparkles, 
+  Receipt, 
+  Camera, 
+  Share2, 
+  Copy, 
+  Zap, 
+  Briefcase, 
+  Layers, 
+  Wrench, 
+  ShieldCheck, 
+  BarChart3, 
+  Users, 
+  Clock, 
+  AlertTriangle, 
+  DollarSign, 
+  Building2 
 } from 'lucide-react';
 import { StorageService } from '@/lib/data/storage';
-import { Budget, IngestedInvoice, CanonicalProduct, UserProfile } from '@/lib/types';
+import { 
+  Budget, 
+  IngestedInvoice, 
+  CanonicalProduct, 
+  UserProfile, 
+  Project, 
+  ServiceOrder, 
+  InventoryStock 
+} from '@/lib/types';
 import { formatPYG, formatDatePY, isPriceStale } from '@/lib/utils';
 import { generateClientPDF } from '@/lib/export/pdf-generator';
 
 export default function DashboardPage() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [permissions, setPermissions] = useState(StorageService.getUserPermissions(null));
+  
   const [searchQuery, setSearchQuery] = useState('');
   const [products, setProducts] = useState<CanonicalProduct[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [serviceOrders, setServiceOrders] = useState<ServiceOrder[]>([]);
+  const [stocks, setStocks] = useState<InventoryStock[]>([]);
   const [invoices, setInvoices] = useState<IngestedInvoice[]>([]);
+  
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [copiedSipap, setCopiedSipap] = useState(false);
   const [dbStatus, setDbStatus] = useState<string>('Verificando...');
 
   useEffect(() => {
-    setCurrentUser(StorageService.getCurrentUser());
+    const user = StorageService.getCurrentUser();
+    setCurrentUser(user);
+    setPermissions(StorageService.getUserPermissions(user));
+
     setProducts(StorageService.getProducts());
     setBudgets(StorageService.getBudgets());
+    setProjects(StorageService.getProjects());
+    setServiceOrders(StorageService.getServiceOrders());
+    setStocks(StorageService.getStocks());
     setInvoices(StorageService.getInvoices());
 
-    // Verificar salud de Neon DB en segundo plano
+    // Verificar salud de Neon DB
     fetch('/api/db/health')
       .then(res => res.json())
       .then(data => {
         if (data.status === 'connected') {
           setDbStatus(`Neon Cloud • ${data.stats?.products || 13} productos`);
         } else {
-          setDbStatus('Local-First (En Memoria)');
+          setDbStatus('Local-First Activo');
         }
       })
       .catch(() => setDbStatus('Modo Offline'));
@@ -80,9 +107,8 @@ export default function DashboardPage() {
   };
 
   const handleShareWhatsApp = (budget: Budget) => {
-    const text = `*PRESUPUESTO ELÉCTRICO* ⚡\n*Construlogica Emprendimientos S.A.*\n\n*Cliente:* ${budget.client.name}\n*Comprobante:* ${budget.budget_number}\n*Total:* ${formatPYG(budget.total_sale_pyg)} (IVA 10% incluido)\n*Validez:* 15 días\n\n_Generado profesionalmente por ElectroCotiza._`;
-    const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
-    window.open(url, '_blank');
+    const text = `*PRESUPUESTO ELÉCTRICO* ⚡\n*Construlogica Emprendimientos S.A.*\n\n*Cliente:* ${budget.client.name}\n*Comprobante:* ${budget.budget_number}\n*Total:* ${formatPYG(budget.total_sale_pyg)} (IVA 10% incluido)\n*Validez:* 15 días\n\n_Generado profesionalmente por el Sistema Comercial._`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   };
 
   const handleCopySipap = () => {
@@ -93,33 +119,68 @@ export default function DashboardPage() {
     setTimeout(() => setCopiedSipap(false), 3000);
   };
 
-  const totalCotizado = budgets.reduce((acc, b) => acc + (b.total_sale_pyg || 0), 0);
+  // --- CÁLCULO DE LOS 7 INDICADORES EXIGIDOS POR EL REQUERIMIENTO ---
+  // 1. Presupuestos por estado
+  const presupuestosBorrador = budgets.filter(b => b.status === 'draft').length;
+  const presupuestosPendientes = budgets.filter(b => b.status === 'pending_authorization').length;
+  const presupuestosEnviados = budgets.filter(b => b.status === 'sent').length;
+  const presupuestosAprobados = budgets.filter(b => b.status === 'accepted').length;
+
+  // 2. Importe total presupuestos enviados
+  const importeEnviados = budgets
+    .filter(b => b.status === 'sent')
+    .reduce((acc, b) => acc + (b.total_sale_pyg || 0), 0);
+
+  // 3. Importe presupuestos aprobados
+  const importeAprobados = budgets
+    .filter(b => b.status === 'accepted')
+    .reduce((acc, b) => acc + (b.total_sale_pyg || 0), 0);
+
+  // 4. Proyectos activos
+  const proyectosActivos = projects.filter(p => p.status === 'en_ejecucion' || p.status === 'en_pruebas').length;
+
+  // 5. Materiales pendientes de recepción en obras
+  let materialesPendientesRecepcion = 0;
+  projects.forEach(p => {
+    p.materials?.forEach(m => {
+      if ((m.quantity_pending || 0) > 0) materialesPendientesRecepcion++;
+    });
+  });
+
+  // 6. Precios desactualizados (> 60 días)
   const staleCount = products.filter(p => isPriceStale(p.last_price_date, 60)).length;
 
+  // 7. Órdenes de servicio pendientes
+  const ordenesPendientes = serviceOrders.filter(o => o.status === 'pendiente' || o.status === 'en_proceso').length;
+
   return (
-    <div className="max-w-md sm:max-w-2xl lg:max-w-5xl mx-auto px-3.5 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
+    <div className="max-w-7xl mx-auto px-3 sm:px-6 py-6 space-y-6">
       
-      {/* 1. CABECERA NATIVA MÓVIL: SALUDO Y ESTADO DE OBRA */}
-      <div className="bg-[#0F1E33] border border-slate-800 rounded-3xl p-4 sm:p-5 shadow-xl space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2.5">
-            <div className="w-10 h-10 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center font-black text-sm shadow-md shadow-amber-400/30">
+      {/* 1. HERO CABECERA: SALUDO Y BUSCADOR INTELIGENTE */}
+      <div className="bg-[#0B1526] border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl text-white space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center space-x-3">
+            <div className="w-11 h-11 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center font-black text-base shadow-md shadow-amber-400/25">
               {currentUser?.full_name?.substring(0, 2).toUpperCase() || 'LD'}
             </div>
             <div>
-              <div className="flex items-center space-x-1.5">
-                <span className="text-xs font-semibold text-slate-400">¡Hola, {currentUser?.full_name?.split(' ')[0] || 'Lucas'}! 👋</span>
+              <div className="flex items-center space-x-2">
+                <span className="text-xs font-semibold text-slate-400">¡Hola, {currentUser?.full_name?.split(' ')[0] || 'Lucas'}!</span>
+                <span className="text-[10px] font-mono font-bold bg-amber-400/20 text-amber-300 px-2 py-0.5 rounded border border-amber-400/30 uppercase">
+                  Rol: {currentUser?.role}
+                </span>
               </div>
-              <h1 className="text-sm sm:text-base font-black text-white leading-tight">
-                Construlogica Emprendimientos
+              <h1 className="text-base sm:text-xl font-black text-white leading-tight">
+                Panel de Control Comercial & Operativo
               </h1>
             </div>
           </div>
 
-          {/* BADGE DE ESTADO DE BASE DE DATOS */}
-          <div className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="truncate max-w-[120px]">{dbStatus}</span>
+          <div className="flex items-center space-x-2">
+            <div className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span>{dbStatus}</span>
+            </div>
           </div>
         </div>
 
@@ -130,277 +191,209 @@ export default function DashboardPage() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Buscar precios de cables, disyuntores, caños..."
-            className="w-full pl-10 pr-20 py-2.5 bg-slate-900/90 border border-slate-700/80 rounded-2xl text-xs sm:text-sm text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400 shadow-inner"
+            placeholder="Buscar precios de materiales: cable 2.5mm, disyuntor ABB, planchuela de cobre, caño corrugado..."
+            className="w-full pl-10 pr-24 py-2.5 bg-slate-900/90 border border-slate-700 rounded-xl text-xs sm:text-sm text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400 shadow-inner"
           />
           <button
             type="submit"
-            className="absolute right-1.5 top-1.5 px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black rounded-xl text-xs transition-all active:scale-95"
+            className="absolute right-1.5 top-1.5 px-3.5 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black rounded-lg text-xs transition-all active:scale-95"
           >
             Buscar
           </button>
         </form>
       </div>
 
-      {/* 2. DOCK DE ACCIONES RÁPIDAS (BOTONES DE PULGAR) */}
-      <div className="grid grid-cols-2 gap-3">
-        {/* BOTÓN PRIMARIO: NUEVA COTIZACIÓN */}
-        <Link
-          href="/presupuestos/nuevo"
-          className="p-4 rounded-3xl bg-gradient-to-br from-amber-500 via-amber-400 to-yellow-400 text-slate-950 shadow-lg shadow-amber-500/25 active:scale-95 transition-all flex flex-col justify-between group border border-amber-300"
-        >
-          <div className="flex items-center justify-between">
-            <div className="w-10 h-10 rounded-2xl bg-slate-950/20 flex items-center justify-center">
-              <Plus className="w-6 h-6 stroke-[3] text-slate-950" />
-            </div>
-            <span className="text-[10px] font-black uppercase tracking-wider bg-slate-950 text-amber-400 px-2 py-0.5 rounded-full">
-              Rápido
-            </span>
-          </div>
-
-          <div className="mt-4">
-            <span className="text-sm sm:text-base font-black block leading-tight">
-              + Cotizar Obra
-            </span>
-            <span className="text-[11px] font-bold text-slate-900/80 block mt-0.5">
-              Generar presupuesto
-            </span>
-          </div>
-        </Link>
-
-        {/* BOTÓN SECUNDARIO: ESCANEAR FACTURA */}
-        <Link
-          href="/ingesta"
-          className="p-4 rounded-3xl bg-[#0F1E33] border border-slate-700/80 text-white shadow-md active:scale-95 transition-all flex flex-col justify-between group hover:border-amber-400/50"
-        >
-          <div className="flex items-center justify-between">
-            <div className="w-10 h-10 rounded-2xl bg-amber-400/10 text-amber-400 flex items-center justify-center">
-              <Camera className="w-5 h-5" />
-            </div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              Cámara/Manual
-            </span>
-          </div>
-
-          <div className="mt-4">
-            <span className="text-sm sm:text-base font-black block leading-tight text-white group-hover:text-amber-300">
-              Escanear Factura
-            </span>
-            <span className="text-[11px] font-medium text-slate-400 block mt-0.5 truncate">
-              Guardar precio de compra
-            </span>
-          </div>
-        </Link>
-      </div>
-
-      {/* 3. CHIPS HORIZONTALES CON MÉTRICAS CLAVE DE OBRA */}
-      <div className="flex items-center space-x-2.5 overflow-x-auto pb-1 scrollbar-none">
+      {/* 2. LOS 7 INDICADORES OPERATIVOS Y COMERCIALES (KPIS) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
         
-        <div className="bg-[#0F1E33] border border-slate-800 rounded-2xl px-3.5 py-2 shrink-0 flex items-center space-x-2.5 shadow-sm">
-          <div className="w-7 h-7 rounded-xl bg-amber-400/10 text-amber-400 flex items-center justify-center text-xs font-black">
-            ₲
+        {/* KPI 1: Presupuestos por Estado */}
+        <Link href="/presupuestos" className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:border-blue-300 transition-colors">
+          <span className="text-[11px] font-bold text-slate-500 uppercase block">Presupuestos por Estado</span>
+          <div className="flex items-center space-x-1.5 mt-2">
+            <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-blue-100 text-blue-800" title="Enviados">
+              {presupuestosEnviados} env
+            </span>
+            <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-100 text-emerald-800" title="Aprobados">
+              {presupuestosAprobados} apr
+            </span>
+            <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-100 text-amber-800" title="Pendientes">
+              {presupuestosPendientes} pend
+            </span>
           </div>
-          <div>
-            <span className="text-[10px] text-slate-400 block font-medium">Cotizado este mes</span>
-            <span className="text-xs font-black text-white">{formatPYG(totalCotizado)}</span>
+          <span className="text-[10px] text-slate-400 block mt-1.5">Total {budgets.length} cotizaciones</span>
+        </Link>
+
+        {/* KPI 2: Importe Presupuestos Enviados */}
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+          <span className="text-[11px] font-bold text-slate-500 uppercase block">Enviados en Negociación</span>
+          <div className="text-base sm:text-lg font-black text-blue-900 font-mono mt-1 truncate">
+            {formatPYG(importeEnviados)}
           </div>
+          <span className="text-[10px] text-slate-400 block mt-1">Ofertas activas con clientes</span>
         </div>
 
-        <div className="bg-[#0F1E33] border border-slate-800 rounded-2xl px-3.5 py-2 shrink-0 flex items-center space-x-2.5 shadow-sm">
-          <div className="w-7 h-7 rounded-xl bg-emerald-400/10 text-emerald-400 flex items-center justify-center text-xs font-black">
-            <Receipt className="w-4 h-4" />
+        {/* KPI 3: Presupuestos Aprobados */}
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+          <span className="text-[11px] font-bold text-slate-500 uppercase block">Contratos Aprobados</span>
+          <div className="text-base sm:text-lg font-black text-emerald-700 font-mono mt-1 truncate">
+            {formatPYG(importeAprobados)}
           </div>
-          <div>
-            <span className="text-[10px] text-slate-400 block font-medium">Facturas auditadas</span>
-            <span className="text-xs font-black text-white">{invoices.length} comprobantes</span>
-          </div>
+          <span className="text-[10px] text-slate-400 block mt-1">{presupuestosAprobados} obras aceptadas</span>
         </div>
 
-        <div className="bg-[#0F1E33] border border-slate-800 rounded-2xl px-3.5 py-2 shrink-0 flex items-center space-x-2.5 shadow-sm">
-          <div className="w-7 h-7 rounded-xl bg-blue-400/10 text-blue-400 flex items-center justify-center text-xs font-black">
-            <Building className="w-4 h-4" />
+        {/* KPI 4: Proyectos Activos */}
+        <Link href="/proyectos" className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:border-blue-300 transition-colors">
+          <span className="text-[11px] font-bold text-slate-500 uppercase block">Proyectos Activos</span>
+          <div className="text-2xl font-black text-slate-900 font-mono mt-1">
+            {proyectosActivos}
           </div>
-          <div>
-            <span className="text-[10px] text-slate-400 block font-medium">Catálogo unificado</span>
-            <span className="text-xs font-black text-white">{products.length} materiales</span>
+          <span className="text-[10px] text-blue-600 font-semibold block mt-1">En ejecución y comisionamiento →</span>
+        </Link>
+
+        {/* KPI 5: Materiales Pendientes de Recepción */}
+        <Link href="/inventario" className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:border-blue-300 transition-colors">
+          <span className="text-[11px] font-bold text-slate-500 uppercase block">Materiales Pend. Obra</span>
+          <div className="text-2xl font-black text-amber-700 font-mono mt-1">
+            {materialesPendientesRecepcion}
           </div>
-        </div>
+          <span className="text-[10px] text-slate-400 block mt-1">Líneas pendientes en pañol</span>
+        </Link>
+
+        {/* KPI 6: Precios Desactualizados (> 60 días) */}
+        <Link href="/catalogo" className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:border-blue-300 transition-colors">
+          <span className="text-[11px] font-bold text-slate-500 uppercase block">Precios Viejos (&gt; 60 d)</span>
+          <div className="text-2xl font-black text-rose-700 font-mono mt-1">
+            {staleCount}
+          </div>
+          <span className="text-[10px] text-rose-600 font-semibold block mt-1">Requieren actualización →</span>
+        </Link>
+
+        {/* KPI 7: Órdenes de Servicio Pendientes */}
+        <Link href="/ordenes-servicio" className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:border-blue-300 transition-colors">
+          <span className="text-[11px] font-bold text-slate-500 uppercase block">Órdenes de Servicio</span>
+          <div className="text-2xl font-black text-blue-800 font-mono mt-1">
+            {ordenesPendientes} pend
+          </div>
+          <span className="text-[10px] text-slate-400 block mt-1">{serviceOrders.length} órdenes en total</span>
+        </Link>
 
         {/* ACCIÓN RÁPIDA SIPAP */}
         <button
+          type="button"
           onClick={handleCopySipap}
-          className="bg-[#0F1E33] hover:bg-slate-800 border border-amber-400/30 rounded-2xl px-3.5 py-2 shrink-0 flex items-center space-x-2.5 shadow-sm active:scale-95 transition-all"
+          className="bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-xl p-4 text-left transition-colors"
         >
-          <div className="w-7 h-7 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center text-xs font-black">
-            <Copy className="w-3.5 h-3.5" />
+          <span className="text-[11px] font-bold text-amber-900 uppercase block">Cuenta SIPAP Continental</span>
+          <div className="text-sm font-mono font-black text-slate-900 mt-1">
+            {copiedSipap ? '¡Copiado al Portapapeles!' : '01-248900-05'}
           </div>
-          <div className="text-left">
-            <span className="text-[10px] text-amber-300 block font-bold">
-              {copiedSipap ? '¡Copiado al Portapapeles!' : 'Cuenta SIPAP Itaú'}
-            </span>
-            <span className="text-xs font-mono font-bold text-white">720014589</span>
-          </div>
+          <span className="text-[10px] text-amber-800 block mt-1">Click para copiar datos de pago</span>
         </button>
 
       </div>
 
-      {/* 4. FEED DE PRESUPUESTOS (TARJETAS NATIVAS MÓVILES) */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between px-1">
-          <div className="flex items-center space-x-2">
-            <FileText className="w-4 h-4 text-amber-400" />
-            <h2 className="text-xs sm:text-sm font-black uppercase tracking-wider text-slate-200">
-              Presupuestos Recientes ({budgets.length})
-            </h2>
-          </div>
-          <Link href="/presupuestos" className="text-[11px] font-bold text-amber-400 hover:text-amber-300">
-            Ver todos →
+      {/* 3. HUB DE MÓDULOS DEL SISTEMA */}
+      <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+        <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wide">
+          Acceso Rápido a Módulos Conectados:
+        </h2>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          
+          <Link href="/presupuestos" className="p-3.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded-xl transition-all group text-center">
+            <FileText className="w-6 h-6 text-blue-700 mx-auto group-hover:scale-110 transition-transform" />
+            <span className="font-bold text-xs text-slate-800 block mt-2">Presupuestos</span>
+            <span className="text-[10px] text-slate-400">8 Etapas</span>
           </Link>
+
+          <Link href="/proyectos" className="p-3.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded-xl transition-all group text-center">
+            <Briefcase className="w-6 h-6 text-blue-700 mx-auto group-hover:scale-110 transition-transform" />
+            <span className="font-bold text-xs text-slate-800 block mt-2">Proyectos</span>
+            <span className="text-[10px] text-slate-400">Seguimiento</span>
+          </Link>
+
+          <Link href="/inventario" className="p-3.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded-xl transition-all group text-center">
+            <Layers className="w-6 h-6 text-blue-700 mx-auto group-hover:scale-110 transition-transform" />
+            <span className="font-bold text-xs text-slate-800 block mt-2">Inventario</span>
+            <span className="text-[10px] text-slate-400">Almacenes</span>
+          </Link>
+
+          <Link href="/ordenes-servicio" className="p-3.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded-xl transition-all group text-center">
+            <Wrench className="w-6 h-6 text-blue-700 mx-auto group-hover:scale-110 transition-transform" />
+            <span className="font-bold text-xs text-slate-800 block mt-2">Órdenes (OS)</span>
+            <span className="text-[10px] text-slate-400">Técnicas</span>
+          </Link>
+
+          <Link href="/checklists" className="p-3.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded-xl transition-all group text-center">
+            <ShieldCheck className="w-6 h-6 text-blue-700 mx-auto group-hover:scale-110 transition-transform" />
+            <span className="font-bold text-xs text-slate-800 block mt-2">Checklists</span>
+            <span className="text-[10px] text-slate-400">Normas ANDE</span>
+          </Link>
+
+          <Link href="/reportes" className="p-3.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded-xl transition-all group text-center">
+            <BarChart3 className="w-6 h-6 text-blue-700 mx-auto group-hover:scale-110 transition-transform" />
+            <span className="font-bold text-xs text-slate-800 block mt-2">Reportes</span>
+            <span className="text-[10px] text-slate-400">Exportar CSV</span>
+          </Link>
+
         </div>
-
-        {budgets.length === 0 ? (
-          <div className="p-8 text-center bg-[#0F1E33] rounded-3xl border border-slate-800 space-y-2">
-            <p className="text-xs text-slate-400 font-medium">Aún no hay cotizaciones creadas.</p>
-            <Link
-              href="/presupuestos/nuevo"
-              className="inline-block px-4 py-2 bg-amber-400 text-slate-950 font-black rounded-xl text-xs"
-            >
-              Crear primera cotización
-            </Link>
-          </div>
-        ) : (
-          <div className="space-y-2.5">
-            {budgets.map((b) => (
-              <div
-                key={b.id}
-                className="bg-[#0F1E33] border border-slate-800 rounded-3xl p-4 shadow-lg space-y-3 hover:border-slate-700 transition-all"
-              >
-                {/* FILA SUPERIOR: N° Y FECHA */}
-                <div className="flex items-center justify-between text-xs">
-                  <div className="flex items-center space-x-2">
-                    <span className="px-2 py-0.5 rounded-md bg-amber-400/20 text-amber-300 font-mono font-bold text-[10px] border border-amber-400/30">
-                      {b.budget_number}
-                    </span>
-                    <span className="text-slate-400 text-[11px] font-medium">
-                      {formatDatePY(b.created_at.split('T')[0])}
-                    </span>
-                  </div>
-
-                  <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                    Aprobado
-                  </span>
-                </div>
-
-                {/* FILA CENTRAL: CLIENTE Y MONTO */}
-                <div className="flex items-end justify-between border-b border-slate-800/80 pb-3">
-                  <div className="min-w-0 pr-2">
-                    <h3 className="font-extrabold text-sm sm:text-base text-white truncate">
-                      {b.client.name}
-                    </h3>
-                    <p className="text-xs text-slate-400 truncate mt-0.5">
-                      {b.title}
-                    </p>
-                  </div>
-
-                  <div className="text-right shrink-0">
-                    <span className="text-[10px] text-slate-400 uppercase font-semibold block">Total Cliente</span>
-                    <span className="text-sm sm:text-base font-black text-amber-400">
-                      {formatPYG(b.total_sale_pyg)}
-                    </span>
-                  </div>
-                </div>
-
-                {/* FILA INFERIOR: BOTONES DE ACCIÓN DE 1 TOQUE (WHATSAPP + PDF DORADO) */}
-                <div className="grid grid-cols-3 gap-2 pt-0.5">
-                  <button
-                    onClick={() => handleShareWhatsApp(b)}
-                    className="py-2 px-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center space-x-1.5 shadow-md shadow-emerald-600/20 active:scale-95 transition-all"
-                    title="Enviar por WhatsApp"
-                  >
-                    <Share2 className="w-3.5 h-3.5" />
-                    <span>WhatsApp</span>
-                  </button>
-
-                  <button
-                    onClick={() => handleDownloadPDF(b)}
-                    disabled={downloadingId === b.id}
-                    className="py-2 px-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs flex items-center justify-center space-x-1.5 shadow-md shadow-amber-400/20 active:scale-95 transition-all"
-                    title="Descargar PDF con Marco Dorado"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    <span>{downloadingId === b.id ? 'Generando...' : 'PDF'}</span>
-                  </button>
-
-                  <Link
-                    href={`/presupuestos/${b.id}`}
-                    className="py-2 px-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center justify-center space-x-1 border border-slate-700 active:scale-95 transition-all"
-                  >
-                    <span>Editar</span>
-                    <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
-                  </Link>
-                </div>
-
-              </div>
-            ))}
-          </div>
-        )}
       </div>
 
-      {/* 5. FEED DE FACTURAS REALES DE PARAGUAY CARGADAS */}
-      <div className="space-y-3 pt-1">
-        <div className="flex items-center justify-between px-1">
-          <div className="flex items-center space-x-2">
-            <Receipt className="w-4 h-4 text-emerald-400" />
-            <h2 className="text-xs sm:text-sm font-black uppercase tracking-wider text-slate-200">
-              Últimas Facturas Registradas ({invoices.length})
-            </h2>
-          </div>
-          <Link href="/ingesta" className="text-[11px] font-bold text-amber-400 hover:text-amber-300">
-            Ver todas →
+      {/* 4. ÚLTIMOS PRESUPUESTOS Y ACCIÓN DIRECTA */}
+      <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wide">
+            Presupuestos Recientes ({budgets.length}):
+          </h2>
+          <Link href="/presupuestos" className="text-xs font-bold text-blue-700 hover:text-blue-900">
+            Ver Listado Completo →
           </Link>
         </div>
 
-        <div className="space-y-2">
-          {invoices.slice(0, 4).map((inv) => (
-            <div
-              key={inv.id}
-              className="bg-[#0F1E33] border border-slate-800 rounded-2xl p-3 flex items-center justify-between space-x-3 text-xs"
-            >
-              <div className="flex items-center space-x-3 min-w-0">
-                <div className="w-8 h-8 rounded-xl bg-slate-800 text-slate-300 flex items-center justify-center shrink-0">
-                  <Receipt className="w-4 h-4 text-amber-400" />
-                </div>
-                <div className="min-w-0">
-                  <span className="font-bold text-white block truncate">
-                    {inv.provider_name}
-                  </span>
-                  <span className="text-[10px] text-slate-400 font-mono block">
-                    Nº {inv.invoice_number} • {formatDatePY(inv.issue_date)}
+        <div className="space-y-3">
+          {budgets.slice(0, 5).map(b => (
+            <div key={b.id} className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+              <div>
+                <div className="flex items-center space-x-2">
+                  <span className="font-mono font-bold text-blue-900">{b.budget_number}</span>
+                  <span className="text-slate-400 font-mono">{formatDatePY(b.created_at.split('T')[0])}</span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800">
+                    {b.status}
                   </span>
                 </div>
+                <h3 className="font-bold text-sm text-slate-900 mt-1">{b.title}</h3>
+                <span className="text-slate-600">Cliente: <strong>{b.client.name}</strong></span>
               </div>
 
-              <div className="text-right shrink-0">
-                <span className="font-black text-emerald-400 block">
-                  {formatPYG(inv.total_pyg)}
-                </span>
-                <span className="text-[9px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.2 rounded font-bold uppercase">
-                  Auditada ✓
-                </span>
+              <div className="flex items-center space-x-3">
+                <div className="text-right">
+                  <span className="text-[10px] text-slate-400 uppercase font-semibold block">Total Facturado</span>
+                  <span className="font-mono font-black text-slate-950 text-base">{formatPYG(b.total_sale_pyg)}</span>
+                </div>
+
+                <div className="flex items-center space-x-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => handleDownloadPDF(b)}
+                    disabled={downloadingId === b.id}
+                    className="p-2 text-slate-600 hover:bg-white hover:text-blue-900 border border-slate-300 rounded-lg transition-colors"
+                    title="Descargar PDF"
+                  >
+                    <Download className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleShareWhatsApp(b)}
+                    className="p-2 text-emerald-700 hover:bg-emerald-50 border border-emerald-300 rounded-lg transition-colors"
+                    title="Compartir por WhatsApp"
+                  >
+                    <Share2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             </div>
           ))}
         </div>
-      </div>
-
-      {/* 6. BANNER DE CONTACTO Y SOPORTE DE OBRA */}
-      <div className="p-4 rounded-3xl bg-gradient-to-r from-slate-900 to-[#0F1E33] border border-slate-800 text-center space-y-1">
-        <p className="text-[11px] font-bold text-slate-300">
-          ElectroCotiza • Diseñado para contratistas en terreno
-        </p>
-        <p className="text-[10px] text-slate-500">
-          Construlogica Emprendimientos S.A. • Alto Paraná, Paraguay
-        </p>
       </div>
 
     </div>

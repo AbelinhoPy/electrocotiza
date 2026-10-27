@@ -12,17 +12,25 @@ import {
   Settings as SettingsIcon,
   PlusCircle,
   Briefcase,
+  Layers,
+  Wrench,
+  ShieldCheck,
+  BarChart3,
+  Users,
   LogOut,
   User,
-  ShieldCheck
+  ChevronDown,
+  Shield
 } from 'lucide-react';
 import { StorageService } from '@/lib/data/storage';
 import { UserProfile } from '@/lib/types';
+import { DEMO_USERS } from '@/lib/data/initial-data';
 
 export function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [showRoleSwitcher, setShowRoleSwitcher] = useState(false);
 
   useEffect(() => {
     setCurrentUser(StorageService.getCurrentUser());
@@ -33,16 +41,27 @@ export function Navbar() {
     router.replace('/login');
   };
 
-  // No mostrar navbar en login
+  const handleSwitchUser = (user: UserProfile) => {
+    StorageService.setCurrentUser(user);
+    setCurrentUser(user);
+    setShowRoleSwitcher(false);
+    window.location.reload();
+  };
+
   if (pathname === '/login') return null;
 
   const navLinks = [
     { href: '/', label: 'Inicio', icon: Zap },
-    { href: '/catalogo', label: 'Precios', icon: Search },
     { href: '/presupuestos', label: 'Presupuestos', icon: FileText },
-    { href: '/ingesta', label: 'Facturas', icon: UploadCloud },
-    { href: '/empresa', label: 'Mi Empresa', icon: Briefcase },
+    { href: '/proyectos', label: 'Proyectos', icon: Briefcase },
+    { href: '/catalogo', label: 'Precios', icon: Search },
+    { href: '/inventario', label: 'Inventario', icon: Layers },
+    { href: '/ordenes-servicio', label: 'Órdenes', icon: Wrench },
+    { href: '/checklists', label: 'Checklists', icon: ShieldCheck },
+    { href: '/clientes', label: 'Clientes', icon: Users },
     { href: '/proveedores', label: 'Proveedores', icon: Building2 },
+    { href: '/reportes', label: 'Reportes', icon: BarChart3 },
+    { href: '/ingesta', label: 'Facturas', icon: UploadCloud },
     { href: '/configuracion', label: 'Ajustes', icon: SettingsIcon },
   ];
 
@@ -51,7 +70,7 @@ export function Navbar() {
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-14 sm:h-16">
           
-          {/* LOGO & BRANDING MÓVIL Y DESKTOP */}
+          {/* LOGO & BRANDING */}
           <Link href="/" className="flex items-center space-x-2.5 group shrink-0 active:scale-95 transition-transform">
             <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-amber-400 flex items-center justify-center shadow-lg shadow-amber-500/25">
               <Zap className="w-5 h-5 sm:w-6 sm:h-6 text-slate-950 fill-slate-950" />
@@ -71,8 +90,8 @@ export function Navbar() {
             </div>
           </Link>
 
-          {/* NAVEGACIÓN DESKTOP */}
-          <nav className="hidden lg:flex items-center space-x-1">
+          {/* NAVEGACIÓN DESKTOP COMPLETA CON SCROLL HORIZONTAL SI SE REQUIERE */}
+          <nav className="hidden xl:flex items-center space-x-1">
             {navLinks.map((link) => {
               const Icon = link.icon;
               const isActive = pathname === link.href || (link.href !== '/' && pathname.startsWith(link.href));
@@ -80,7 +99,7 @@ export function Navbar() {
                 <Link
                   key={link.href}
                   href={link.href}
-                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                  className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
                     isActive
                       ? 'bg-amber-400 text-slate-950 shadow-sm'
                       : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
@@ -93,10 +112,10 @@ export function Navbar() {
             })}
           </nav>
 
-          {/* PERFIL MÓVIL Y BOTÓN DE CIERRE DE SESIÓN */}
+          {/* PERFIL, ROLE SWITCHER Y ACCIONES RÁPIDAS */}
           <div className="flex items-center space-x-2">
             
-            {/* Botón Desktop Nueva Cotización */}
+            {/* Botón Nueva Cotización */}
             <Link
               href="/presupuestos/nuevo"
               className="hidden sm:inline-flex items-center space-x-1.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black px-3.5 py-1.5 rounded-xl text-xs shadow-md shadow-amber-500/20 transition-all active:scale-95"
@@ -105,31 +124,62 @@ export function Navbar() {
               <span>Cotizar Obra</span>
             </Link>
 
-            {/* AVATAR Y PERFIL DEL USUARIO */}
+            {/* SELECTOR DE ROL / PERFIL RBAC */}
             {currentUser && (
-              <div className="flex items-center space-x-1.5 sm:space-x-2 pl-2 sm:border-l sm:border-slate-800">
-                <div className="w-8 h-8 rounded-xl bg-amber-400/20 border border-amber-400/30 text-amber-300 flex items-center justify-center text-xs font-black">
-                  {currentUser.full_name.substring(0, 2).toUpperCase()}
-                </div>
-
-                <div className="hidden md:block text-left">
-                  <span className="text-xs font-bold text-white block leading-tight">
-                    {currentUser.full_name}
-                  </span>
-                  <span className="text-[9px] text-amber-400 font-mono font-bold block uppercase">
-                    {currentUser.role === 'owner' ? 'Jefe de Obra' : currentUser.role}
-                  </span>
-                </div>
-
-                {/* BOTÓN CERRAR SESIÓN (SIEMPRE VISIBLE EN MÓVIL Y PC) */}
+              <div className="relative">
                 <button
-                  onClick={handleLogout}
-                  className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl bg-slate-800/80 hover:bg-red-500/20 text-slate-300 hover:text-red-400 border border-slate-700/80 hover:border-red-500/40 text-xs font-bold transition-all flex items-center space-x-1 active:scale-95"
-                  title="Cerrar turno de obra / Salir al login"
+                  type="button"
+                  onClick={() => setShowRoleSwitcher(!showRoleSwitcher)}
+                  className="flex items-center space-x-2 px-2 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 transition-colors"
                 >
-                  <LogOut className="w-3.5 h-3.5 text-amber-400 hover:text-red-400" />
-                  <span className="hidden sm:inline text-[11px]">Salir</span>
+                  <div className="w-7 h-7 rounded-lg bg-amber-400/20 text-amber-300 font-bold text-xs flex items-center justify-center">
+                    {currentUser.full_name.substring(0, 2).toUpperCase()}
+                  </div>
+                  <div className="hidden md:block text-left">
+                    <span className="text-xs font-bold text-white block leading-tight truncate max-w-[110px]">
+                      {currentUser.full_name.split(' ')[0]}
+                    </span>
+                    <span className="text-[9px] text-amber-400 font-mono font-bold block uppercase leading-none">
+                      {currentUser.role}
+                    </span>
+                  </div>
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
                 </button>
+
+                {showRoleSwitcher && (
+                  <div className="absolute right-0 mt-2 z-50 bg-[#0F2137] border border-slate-700 rounded-xl shadow-2xl p-2 w-64 text-left space-y-1">
+                    <span className="text-[10px] text-slate-400 uppercase font-black px-2 py-1 block">
+                      Cambiar Rol / Perfil RBAC:
+                    </span>
+                    {DEMO_USERS.map(u => (
+                      <button
+                        key={u.id}
+                        type="button"
+                        onClick={() => handleSwitchUser(u)}
+                        className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-between transition-colors ${
+                          currentUser.id === u.id ? 'bg-amber-400 text-slate-950 font-bold' : 'text-slate-300 hover:bg-slate-800'
+                        }`}
+                      >
+                        <div className="truncate">
+                          <span className="block truncate leading-tight">{u.full_name}</span>
+                          <span className="text-[10px] font-mono opacity-80 uppercase">{u.role}</span>
+                        </div>
+                        {currentUser.id === u.id && <span>✓</span>}
+                      </button>
+                    ))}
+
+                    <div className="border-t border-slate-800 pt-1 mt-1">
+                      <button
+                        type="button"
+                        onClick={handleLogout}
+                        className="w-full text-left px-2 py-1.5 text-xs text-red-400 hover:bg-red-500/10 rounded-lg flex items-center space-x-1 font-bold"
+                      >
+                        <LogOut className="w-3.5 h-3.5" />
+                        <span>Cerrar Sesión</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

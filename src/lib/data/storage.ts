@@ -10,6 +10,15 @@ import {
   INITIAL_SETTINGS,
   INITIAL_USER,
   DEMO_USERS,
+  INITIAL_SERVICES,
+  INITIAL_WAREHOUSES,
+  INITIAL_STOCKS,
+  INITIAL_INVENTORY_MOVEMENTS,
+  INITIAL_PROJECTS,
+  INITIAL_SERVICE_ORDERS,
+  INITIAL_CHECKLIST_TEMPLATES,
+  INITIAL_CHECKLIST_EXECUTIONS,
+  INITIAL_AUDIT_EVENTS,
 } from './initial-data';
 import {
   Budget,
@@ -20,20 +29,45 @@ import {
   IngestedInvoice,
   PriceRecord,
   Provider,
+  CompanySettings,
   Settings,
   UserProfile,
+  UserPermissions,
+  CatalogService,
+  Warehouse,
+  InventoryStock,
+  InventoryMovement,
+  Project,
+  ProjectMaterial,
+  ServiceOrder,
+  ChecklistTemplate,
+  ChecklistExecution,
+  AuditEvent,
+  QuoteStatus,
+  QuoteRevision,
+  DiscountApprovalRequest,
 } from '../types';
 import { matchScore, normalizeText } from '../fuzzy';
+import { PricingEngine } from '../pricing-engine';
 
 const STORAGE_KEYS = {
-  PRODUCTS: 'electrocotiza_products_v1',
-  BUDGETS: 'electrocotiza_budgets_v1',
-  CLIENTS: 'electrocotiza_clients_v1',
-  PROVIDERS: 'electrocotiza_providers_v1',
-  CATEGORIES: 'electrocotiza_categories_v1',
-  INVOICES: 'electrocotiza_invoices_v1',
-  SETTINGS: 'electrocotiza_settings_v1',
-  USER: 'electrocotiza_current_user_v1',
+  PRODUCTS: 'electrocotiza_products_v2',
+  BUDGETS: 'electrocotiza_budgets_v2',
+  CLIENTS: 'electrocotiza_clients_v2',
+  PROVIDERS: 'electrocotiza_providers_v2',
+  CATEGORIES: 'electrocotiza_categories_v2',
+  INVOICES: 'electrocotiza_invoices_v2',
+  SETTINGS: 'electrocotiza_settings_v2',
+  USER: 'electrocotiza_current_user_v2',
+  SERVICES: 'electrocotiza_services_v2',
+  WAREHOUSES: 'electrocotiza_warehouses_v2',
+  STOCKS: 'electrocotiza_stocks_v2',
+  MOVEMENTS: 'electrocotiza_movements_v2',
+  PROJECTS: 'electrocotiza_projects_v2',
+  SERVICE_ORDERS: 'electrocotiza_service_orders_v2',
+  CHECKLIST_TEMPLATES: 'electrocotiza_chk_templates_v2',
+  CHECKLIST_EXECUTIONS: 'electrocotiza_chk_executions_v2',
+  AUDIT_EVENTS: 'electrocotiza_audit_events_v2',
 };
 
 function getLocal<T>(key: string, fallback: T): T {
@@ -56,9 +90,9 @@ function setLocal<T>(key: string, data: T): void {
 }
 
 export const StorageService = {
-  // --- AUTH & USUARIOS ---
+  // --- 1. AUTH, USUARIOS Y ROLES (RBAC) ---
   getCurrentUser(): UserProfile | null {
-    return getLocal<UserProfile | null>(STORAGE_KEYS.USER, null);
+    return getLocal<UserProfile | null>(STORAGE_KEYS.USER, INITIAL_USER);
   },
   setCurrentUser(user: UserProfile): void {
     setLocal(STORAGE_KEYS.USER, user);
@@ -74,63 +108,181 @@ export const StorageService = {
     return DEMO_USERS;
   },
 
-  // --- SETTINGS ---
-  getSettings(): Settings {
-    return getLocal(STORAGE_KEYS.SETTINGS, INITIAL_SETTINGS);
-  },
-  saveSettings(settings: Settings): void {
-    setLocal(STORAGE_KEYS.SETTINGS, settings);
+  getUserPermissions(user?: UserProfile | null): UserPermissions {
+    const current = user || this.getCurrentUser();
+    if (!current) {
+      return {
+        canViewCosts: false,
+        canEditBudgets: false,
+        canApproveDiscounts: false,
+        canManageProjects: false,
+        canManageInventory: false,
+        canManageClients: false,
+        canManageUsers: false,
+      };
+    }
+
+    const role = current.role;
+    if (role === 'admin' || role === 'owner') {
+      return {
+        canViewCosts: true,
+        canEditBudgets: true,
+        canApproveDiscounts: true,
+        canManageProjects: true,
+        canManageInventory: true,
+        canManageClients: true,
+        canManageUsers: true,
+      };
+    }
+    if (role === 'presupuestista') {
+      return {
+        canViewCosts: true,
+        canEditBudgets: true,
+        canApproveDiscounts: false,
+        canManageProjects: false,
+        canManageInventory: false,
+        canManageClients: true,
+        canManageUsers: false,
+      };
+    }
+    if (role === 'vendedor') {
+      return {
+        canViewCosts: false, // Confidencialidad
+        canEditBudgets: true,
+        canApproveDiscounts: false,
+        canManageProjects: false,
+        canManageInventory: false,
+        canManageClients: true,
+        canManageUsers: false,
+      };
+    }
+    if (role === 'tecnico' || role === 'electrician') {
+      return {
+        canViewCosts: false,
+        canEditBudgets: false,
+        canApproveDiscounts: false,
+        canManageProjects: true,
+        canManageInventory: true,
+        canManageClients: false,
+        canManageUsers: false,
+      };
+    }
+    // consulta
+    return {
+      canViewCosts: false,
+      canEditBudgets: false,
+      canApproveDiscounts: false,
+      canManageProjects: false,
+      canManageInventory: false,
+      canManageClients: false,
+      canManageUsers: false,
+    };
   },
 
-  // --- GEMINI VISION AI KEY ---
-  getGeminiApiKey(): string {
-    if (typeof window === 'undefined') return '';
-    return localStorage.getItem('electrocotiza_gemini_api_key') || '';
+  // --- 2. CONFIGURACIÓN DE EMPRESA Y COMERCIAL ---
+  getSettings(): CompanySettings {
+    return getLocal(STORAGE_KEYS.SETTINGS, INITIAL_SETTINGS);
   },
-  setGeminiApiKey(key: string): void {
-    if (typeof window === 'undefined') return;
-    const clean = key.trim();
-    if (!clean) {
-      localStorage.removeItem('electrocotiza_gemini_api_key');
+  saveSettings(settings: CompanySettings): void {
+    setLocal(STORAGE_KEYS.SETTINGS, settings);
+    this.logAuditEvent({
+      event_type: 'quote_status_changed',
+      entity: 'CompanySettings',
+      entity_id: 'org-main',
+      user_name: this.getCurrentUser()?.full_name || 'Admin',
+      details: 'Configuración comercial de la empresa actualizada.',
+    });
+  },
+
+  // --- 3. AUDITORÍA Y TRAZABILIDAD ---
+  getAuditEvents(): AuditEvent[] {
+    return getLocal(STORAGE_KEYS.AUDIT_EVENTS, INITIAL_AUDIT_EVENTS);
+  },
+  logAuditEvent(event: Omit<AuditEvent, 'id' | 'created_at'>): void {
+    const events = this.getAuditEvents();
+    const newEvent: AuditEvent = {
+      ...event,
+      id: `aud-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      created_at: new Date().toISOString(),
+    };
+    setLocal(STORAGE_KEYS.AUDIT_EVENTS, [newEvent, ...events.slice(0, 999)]);
+  },
+
+  // --- 4. CLIENTES ---
+  getClients(): Client[] {
+    return getLocal(STORAGE_KEYS.CLIENTS, INITIAL_CLIENTS);
+  },
+  getClientById(id: string): Client | undefined {
+    return this.getClients().find(c => c.id === id);
+  },
+  saveClient(client: Client): void {
+    const clients = this.getClients();
+    const idx = clients.findIndex(c => c.id === client.id);
+    if (idx >= 0) {
+      clients[idx] = { ...client, updated_at: new Date().toISOString() };
     } else {
-      localStorage.setItem('electrocotiza_gemini_api_key', clean);
+      clients.unshift({ ...client, created_at: new Date().toISOString() });
+    }
+    setLocal(STORAGE_KEYS.CLIENTS, clients);
+  },
+  toggleClientActive(id: string): void {
+    const clients = this.getClients();
+    const idx = clients.findIndex(c => c.id === id);
+    if (idx >= 0) {
+      clients[idx].is_active = !clients[idx].is_active;
+      setLocal(STORAGE_KEYS.CLIENTS, clients);
     }
   },
 
-  // --- PROVIDERS ---
+  // --- 5. PROVEEDORES ---
   getProviders(): Provider[] {
     return getLocal(STORAGE_KEYS.PROVIDERS, INITIAL_PROVIDERS);
   },
-  addProvider(prov: Provider): void {
-    const current = this.getProviders();
-    setLocal(STORAGE_KEYS.PROVIDERS, [prov, ...current]);
+  getProviderById(id: string): Provider | undefined {
+    return this.getProviders().find(p => p.id === id);
+  },
+  saveProvider(provider: Provider): void {
+    const providers = this.getProviders();
+    const idx = providers.findIndex(p => p.id === provider.id);
+    if (idx >= 0) {
+      providers[idx] = { ...provider, last_updated: new Date().toISOString() };
+    } else {
+      providers.unshift({ ...provider, last_updated: new Date().toISOString() });
+    }
+    setLocal(STORAGE_KEYS.PROVIDERS, providers);
   },
 
-  // --- CATEGORIES ---
+  // --- 6. CATEGORÍAS ---
   getCategories(): Category[] {
     return getLocal(STORAGE_KEYS.CATEGORIES, INITIAL_CATEGORIES);
   },
 
-  // --- CLIENTS ---
-  getClients(): Client[] {
-    return getLocal(STORAGE_KEYS.CLIENTS, INITIAL_CLIENTS);
-  },
-  addClient(client: Client): void {
-    const current = this.getClients();
-    setLocal(STORAGE_KEYS.CLIENTS, [client, ...current]);
-  },
-
-  // --- CANONICAL PRODUCTS & FUZZY SEARCH ---
+  // --- 7. CATÁLOGO DE MATERIALES (CANONICAL PRODUCTS) ---
   getProducts(): CanonicalProduct[] {
     return getLocal(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
   },
   getProductById(id: string): CanonicalProduct | undefined {
     return this.getProducts().find(p => p.id === id);
   },
-
-  /**
-   * Búsqueda difusa en catálogo maestro y alias usando similitud trigram
-   */
+  createProduct(product: CanonicalProduct): void {
+    const current = this.getProducts();
+    setLocal(STORAGE_KEYS.PRODUCTS, [product, ...current]);
+    this.logAuditEvent({
+      event_type: 'price_updated',
+      entity: 'CanonicalProduct',
+      entity_id: product.id,
+      user_name: this.getCurrentUser()?.full_name || 'Sistema',
+      details: `Material registrado en catálogo: ${product.name} (SKU: ${product.sku})`,
+    });
+  },
+  updateProduct(product: CanonicalProduct): void {
+    const current = this.getProducts();
+    const idx = current.findIndex(p => p.id === product.id);
+    if (idx >= 0) {
+      current[idx] = product;
+      setLocal(STORAGE_KEYS.PRODUCTS, current);
+    }
+  },
   searchProducts(query: string, limit = 20): { product: CanonicalProduct; score: number; matchedAlias?: string }[] {
     const cleanQ = normalizeText(query);
     if (!cleanQ) {
@@ -144,7 +296,7 @@ export const StorageService = {
       let maxScore = matchScore(cleanQ, p.name);
       let bestAlias: string | undefined = undefined;
 
-      for (const alias of p.aliases) {
+      for (const alias of p.aliases || []) {
         const aScore = matchScore(cleanQ, alias);
         if (aScore > maxScore) {
           maxScore = aScore;
@@ -152,9 +304,12 @@ export const StorageService = {
         }
       }
 
-      // Si la consulta está directamente contenida en el SKU o código
-      if (normalizeText(p.sku).includes(cleanQ)) {
+      if (normalizeText(p.sku || p.internal_code || '').includes(cleanQ)) {
         maxScore = Math.max(maxScore, 0.95);
+      }
+
+      if (p.brand && normalizeText(p.brand).includes(cleanQ)) {
+        maxScore = Math.max(maxScore, 0.85);
       }
 
       if (maxScore >= 0.25) {
@@ -169,10 +324,6 @@ export const StorageService = {
     scored.sort((a, b) => b.score - a.score);
     return scored.slice(0, limit);
   },
-
-  /**
-   * Encuentra las mejores sugerencias para homologar un texto de factura desconocido
-   */
   suggestForRawText(rawText: string): { product: CanonicalProduct; confidence: number }[] {
     const matches = this.searchProducts(rawText, 3);
     return matches.map(m => ({
@@ -180,10 +331,6 @@ export const StorageService = {
       confidence: m.score,
     }));
   },
-
-  /**
-   * Asocia un alias nuevo a un producto canónico y lo persiste (Homologación confirmada)
-   */
   addAliasToProduct(productId: string, newAlias: string): void {
     const products = this.getProducts();
     const idx = products.findIndex(p => p.id === productId);
@@ -197,10 +344,6 @@ export const StorageService = {
       }
     }
   },
-
-  /**
-   * Registra un nuevo precio en el historial de un producto y actualiza sus estadísticas
-   */
   recordPrice(productId: string, priceRecord: Omit<PriceRecord, 'id'>): void {
     const products = this.getProducts();
     const idx = products.findIndex(p => p.id === productId);
@@ -216,25 +359,407 @@ export const StorageService = {
       p.last_price_date = priceRecord.date;
       p.last_provider_name = priceRecord.provider_name;
 
-      // Recalcular min y max
       const prices = p.history.map(h => h.price_pyg);
       p.min_price_pyg = Math.min(...prices);
       p.max_price_pyg = Math.max(...prices);
 
       products[idx] = p;
       setLocal(STORAGE_KEYS.PRODUCTS, products);
+
+      this.logAuditEvent({
+        event_type: 'price_updated',
+        entity: 'PriceRecord',
+        entity_id: productId,
+        user_name: this.getCurrentUser()?.full_name || 'Sistema',
+        details: `Nuevo precio registrado para ${p.name}: ${priceRecord.price_pyg.toLocaleString('es-PY')} Gs de ${priceRecord.provider_name}`,
+      });
     }
   },
 
-  /**
-   * Crea un nuevo producto canónico desde la interfaz
-   */
-  createProduct(product: CanonicalProduct): void {
-    const current = this.getProducts();
-    setLocal(STORAGE_KEYS.PRODUCTS, [product, ...current]);
+  // --- 8. CATÁLOGO DE SERVICIOS Y TARIFAS ---
+  getServices(): CatalogService[] {
+    return getLocal(STORAGE_KEYS.SERVICES, INITIAL_SERVICES);
+  },
+  saveService(service: CatalogService): void {
+    const services = this.getServices();
+    const idx = services.findIndex(s => s.id === service.id);
+    if (idx >= 0) {
+      services[idx] = service;
+    } else {
+      services.unshift(service);
+    }
+    setLocal(STORAGE_KEYS.SERVICES, services);
   },
 
-  // --- INVOICES / FACTURAS ---
+  // --- 9. PRESUPUESTOS (BUDGETS / QUOTES) ---
+  getBudgets(): Budget[] {
+    return getLocal(STORAGE_KEYS.BUDGETS, INITIAL_BUDGETS);
+  },
+  getBudgetById(id: string): Budget | undefined {
+    return this.getBudgets().find(b => b.id === id);
+  },
+  saveBudget(budget: Budget): void {
+    const current = this.getBudgets();
+    const idx = current.findIndex(b => b.id === budget.id);
+    if (idx >= 0) {
+      current[idx] = { ...budget, updated_at: new Date().toISOString() };
+    } else {
+      current.unshift({ ...budget, created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+    }
+    setLocal(STORAGE_KEYS.BUDGETS, current);
+  },
+  updateBudget(budget: Budget): void {
+    this.saveBudget(budget);
+  },
+  deleteBudget(id: string): void {
+    const filtered = this.getBudgets().filter(b => b.id !== id);
+    setLocal(STORAGE_KEYS.BUDGETS, filtered);
+  },
+  duplicateBudget(id: string): Budget | null {
+    const original = this.getBudgetById(id);
+    if (!original) return null;
+
+    const allBudgets = this.getBudgets();
+    const nextNumber = PricingEngine.generateQuoteNumber(allBudgets);
+
+    const duplicated: Budget = {
+      ...original,
+      id: `b-${Date.now()}`,
+      budget_number: nextNumber,
+      title: `${original.title} (Copia)`,
+      status: 'draft',
+      is_archived: false,
+      current_revision: 1,
+      revisions: [],
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      items: original.items.map((it, i) => ({
+        ...it,
+        id: `bi-${Date.now()}-${i}`,
+      })),
+    };
+
+    this.saveBudget(duplicated);
+    return duplicated;
+  },
+
+  changeBudgetStatus(budgetId: string, newStatus: QuoteStatus, reason?: string): { success: boolean; message: string } {
+    const budget = this.getBudgetById(budgetId);
+    if (!budget) return { success: false, message: 'Presupuesto no encontrado.' };
+
+    const oldStatus = budget.status;
+    budget.status = newStatus;
+    this.saveBudget(budget);
+
+    this.logAuditEvent({
+      event_type: 'quote_status_changed',
+      entity: 'Budget',
+      entity_id: budgetId,
+      user_name: this.getCurrentUser()?.full_name || 'Sistema',
+      details: `Estado cambiado de "${oldStatus}" a "${newStatus}". ${reason ? `Motivo: ${reason}` : ''}`,
+      previous_state: { status: oldStatus },
+      new_state: { status: newStatus },
+    });
+
+    return { success: true, message: `Estado actualizado a ${newStatus}` };
+  },
+
+  toggleArchiveBudget(budgetId: string): void {
+    const budget = this.getBudgetById(budgetId);
+    if (!budget) return;
+    budget.is_archived = !budget.is_archived;
+    this.saveBudget(budget);
+  },
+
+  requestDiscountApproval(budgetId: string, discountPct: number, reason: string): { success: boolean; message: string } {
+    const budget = this.getBudgetById(budgetId);
+    if (!budget) return { success: false, message: 'Presupuesto no encontrado.' };
+
+    const user = this.getCurrentUser();
+    const request: DiscountApprovalRequest = {
+      id: `disc-${Date.now()}`,
+      quote_id: budgetId,
+      requested_by_user_id: user?.id || 'usr-anon',
+      requested_by_name: user?.full_name || 'Vendedor',
+      discount_pct: discountPct,
+      reason,
+      status: 'pending',
+    };
+
+    budget.discount_approval = request;
+    budget.status = 'pending_authorization';
+    this.saveBudget(budget);
+
+    this.logAuditEvent({
+      event_type: 'discount_approved',
+      entity: 'Budget',
+      entity_id: budgetId,
+      user_name: user?.full_name || 'Vendedor',
+      details: `Solicitud de descuento del ${discountPct}% para presupuesto ${budget.budget_number}. Motivo: ${reason}`,
+    });
+
+    return { success: true, message: 'Solicitud enviada a revisión por el Administrador.' };
+  },
+
+  approveDiscount(budgetId: string): { success: boolean; message: string } {
+    const budget = this.getBudgetById(budgetId);
+    if (!budget || !budget.discount_approval) return { success: false, message: 'No hay solicitud pendiente.' };
+
+    const user = this.getCurrentUser();
+    budget.discount_approval.status = 'approved';
+    budget.discount_approval.approved_by_user_id = user?.id;
+    budget.discount_approval.approved_by_name = user?.full_name || 'Administrador';
+    budget.discount_approval.approved_at = new Date().toISOString();
+    budget.status = 'draft'; // Retorna a borrador listo para emitir
+    this.saveBudget(budget);
+
+    this.logAuditEvent({
+      event_type: 'discount_approved',
+      entity: 'Budget',
+      entity_id: budgetId,
+      user_name: user?.full_name || 'Administrador',
+      details: `Descuento del ${budget.discount_approval.discount_pct}% APROBADO por ${user?.full_name}`,
+    });
+
+    return { success: true, message: 'Descuento autorizado con éxito.' };
+  },
+
+  emitBudgetRevision(budgetId: string, notes: string = 'Emisión oficial'): QuoteRevision | null {
+    const budget = this.getBudgetById(budgetId);
+    if (!budget) return null;
+
+    const user = this.getCurrentUser();
+    const nextRevNum = (budget.current_revision || 0) + 1;
+
+    // Snapshot inmutable de toda la estructura de costos y precios
+    const revision: QuoteRevision = {
+      revision_number: nextRevNum,
+      created_at: new Date().toISOString(),
+      created_by_name: user?.full_name || 'Presupuestista',
+      total_sale_pyg: budget.total_sale_pyg,
+      total_cost_pyg: budget.total_cost_pyg,
+      subtotal_net_pyg: budget.subtotal_net_pyg || budget.total_sale_pyg,
+      iva_amount_pyg: budget.iva_amount_pyg,
+      summary_notes: notes,
+      snapshot_data: JSON.parse(JSON.stringify(budget)),
+    };
+
+    budget.current_revision = nextRevNum;
+    budget.revisions = [revision, ...(budget.revisions || [])];
+    budget.status = 'sent'; // Al emitir pasa a Enviado al cliente
+    this.saveBudget(budget);
+
+    this.logAuditEvent({
+      event_type: 'quote_revision_emitted',
+      entity: 'Budget',
+      entity_id: budgetId,
+      user_name: user?.full_name || 'Presupuestista',
+      details: `Revisión ${nextRevNum} emitida inmutable para ${budget.budget_number}. Total: ${budget.total_sale_pyg.toLocaleString('es-PY')} Gs`,
+    });
+
+    return revision;
+  },
+
+  // --- 10. CONVERSIÓN A PROYECTO Y SEGUIMIENTO ---
+  getProjects(): Project[] {
+    return getLocal(STORAGE_KEYS.PROJECTS, INITIAL_PROJECTS);
+  },
+  getProjectById(id: string): Project | undefined {
+    return this.getProjects().find(p => p.id === id);
+  },
+  saveProject(project: Project): void {
+    const projects = this.getProjects();
+    const idx = projects.findIndex(p => p.id === project.id);
+    if (idx >= 0) {
+      projects[idx] = { ...project, updated_at: new Date().toISOString() };
+    } else {
+      projects.unshift({ ...project, created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+    }
+    setLocal(STORAGE_KEYS.PROJECTS, projects);
+  },
+
+  convertBudgetToProject(
+    budgetId: string, 
+    managerName: string = 'Ramón Fleitas', 
+    startDate: string = new Date().toISOString().split('T')[0],
+    estimatedEndDate: string = ''
+  ): { success: boolean; project?: Project; message: string } {
+    const budget = this.getBudgetById(budgetId);
+    if (!budget) return { success: false, message: 'Presupuesto no encontrado.' };
+
+    const projects = this.getProjects();
+    const nextCode = PricingEngine.generateProjectCode(projects);
+
+    // Mapear materiales previstos
+    const materials: ProjectMaterial[] = budget.items
+      .filter(i => !i.is_excluded_or_client_provided)
+      .map((item, index) => ({
+        id: `pm-${Date.now()}-${index}`,
+        material_id: item.canonical_product_id || `mat-manual-${index}`,
+        description: item.description,
+        unit: item.unit,
+        quantity_required: item.quantity,
+        quantity_received: 0,
+        quantity_installed: 0,
+        quantity_pending: item.quantity,
+        notes: item.notes || 'Requerido según presupuesto aprobado',
+      }));
+
+    const newProject: Project = {
+      id: `proy-${Date.now()}`,
+      code: nextCode,
+      name: budget.title || `Proyecto ${budget.budget_number}`,
+      quote_id: budget.id,
+      quote_number: budget.budget_number,
+      client: budget.client,
+      manager_name: managerName,
+      status: 'en_ejecucion',
+      start_date: startDate,
+      estimated_end_date: estimatedEndDate || startDate,
+      progress_pct: 0,
+      total_contract_pyg: budget.total_sale_pyg,
+      materials,
+      scope_changes: [],
+      tasks: budget.schedule_tasks || [],
+      notes: `Convertido automáticamente desde Presupuesto ${budget.budget_number}.`,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    this.saveProject(newProject);
+
+    // Actualizar estado del presupuesto a Aprobado
+    budget.status = 'accepted';
+    this.saveBudget(budget);
+
+    this.logAuditEvent({
+      event_type: 'project_created',
+      entity: 'Project',
+      entity_id: newProject.id,
+      user_name: this.getCurrentUser()?.full_name || 'Sistema',
+      details: `Proyecto ${nextCode} creado desde Presupuesto ${budget.budget_number} (${budget.client.name})`,
+    });
+
+    return {
+      success: true,
+      project: newProject,
+      message: `¡Presupuesto ${budget.budget_number} convertido en Proyecto ${nextCode} exitosamente!`,
+    };
+  },
+
+  updateProjectMaterialStatus(
+    projectId: string, 
+    materialId: string, 
+    deltaReceived: number, 
+    deltaInstalled: number
+  ): void {
+    const project = this.getProjectById(projectId);
+    if (!project) return;
+
+    const mat = project.materials.find(m => m.id === materialId || m.material_id === materialId);
+    if (mat) {
+      mat.quantity_received = Math.min(mat.quantity_required, (mat.quantity_received || 0) + deltaReceived);
+      mat.quantity_installed = Math.min(mat.quantity_received, (mat.quantity_installed || 0) + deltaInstalled);
+      mat.quantity_pending = Math.max(0, mat.quantity_required - mat.quantity_received);
+      this.saveProject(project);
+    }
+  },
+
+  // --- 11. INVENTARIO Y ALMACENES ---
+  getWarehouses(): Warehouse[] {
+    return getLocal(STORAGE_KEYS.WAREHOUSES, INITIAL_WAREHOUSES);
+  },
+  getStocks(): InventoryStock[] {
+    return getLocal(STORAGE_KEYS.STOCKS, INITIAL_STOCKS);
+  },
+  getMovements(): InventoryMovement[] {
+    return getLocal(STORAGE_KEYS.MOVEMENTS, INITIAL_INVENTORY_MOVEMENTS);
+  },
+  recordInventoryMovement(movement: Omit<InventoryMovement, 'id' | 'created_at' | 'movement_number'>): void {
+    const movements = this.getMovements();
+    const stocks = this.getStocks();
+    const count = movements.length + 1;
+    const movementNumber = `MOV-2026-${String(count).padStart(4, '0')}`;
+
+    const newMov: InventoryMovement = {
+      ...movement,
+      id: `mov-${Date.now()}`,
+      movement_number: movementNumber,
+      created_at: new Date().toISOString(),
+    };
+
+    // Actualizar o crear stock por material y almacén
+    const targetWh = movement.target_warehouse_id || movement.source_warehouse_id || 'wh-asuncion';
+    let stockItem = stocks.find(s => s.material_id === movement.material_id && s.warehouse_id === targetWh);
+
+    if (!stockItem) {
+      stockItem = {
+        id: `stk-${Date.now()}`,
+        material_id: movement.material_id,
+        warehouse_id: targetWh,
+        physical_stock: 0,
+        reserved_stock: 0,
+        available_stock: 0,
+        min_alert_stock: 10,
+      };
+      stocks.push(stockItem);
+    }
+
+    if (movement.movement_type === 'entrada' || movement.movement_type === 'ajuste_positivo') {
+      stockItem.physical_stock += movement.quantity;
+    } else if (movement.movement_type === 'salida' || movement.movement_type === 'ajuste_negativo') {
+      stockItem.physical_stock = Math.max(0, stockItem.physical_stock - movement.quantity);
+    } else if (movement.movement_type === 'reserva_proyecto') {
+      stockItem.reserved_stock += movement.quantity;
+    } else if (movement.movement_type === 'liberacion_reserva') {
+      stockItem.reserved_stock = Math.max(0, stockItem.reserved_stock - movement.quantity);
+    }
+
+    stockItem.available_stock = Math.max(0, stockItem.physical_stock - stockItem.reserved_stock);
+
+    setLocal(STORAGE_KEYS.MOVEMENTS, [newMov, ...movements]);
+    setLocal(STORAGE_KEYS.STOCKS, stocks);
+
+    this.logAuditEvent({
+      event_type: 'inventory_moved',
+      entity: 'InventoryMovement',
+      entity_id: newMov.id,
+      user_name: movement.user_name,
+      details: `${movement.movement_type.toUpperCase()}: ${movement.quantity} ${movement.unit} de ${movement.material_name}. Motivo: ${movement.reason}`,
+    });
+  },
+
+  // --- 12. ÓRDENES DE SERVICIO Y CHECKLISTS ---
+  getServiceOrders(): ServiceOrder[] {
+    return getLocal(STORAGE_KEYS.SERVICE_ORDERS, INITIAL_SERVICE_ORDERS);
+  },
+  getServiceOrderById(id: string): ServiceOrder | undefined {
+    return this.getServiceOrders().find(o => o.id === id);
+  },
+  saveServiceOrder(order: ServiceOrder): void {
+    const orders = this.getServiceOrders();
+    const idx = orders.findIndex(o => o.id === order.id);
+    if (idx >= 0) {
+      orders[idx] = { ...order, updated_at: new Date().toISOString() };
+    } else {
+      orders.unshift({ ...order, created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+    }
+    setLocal(STORAGE_KEYS.SERVICE_ORDERS, orders);
+  },
+
+  getChecklistTemplates(): ChecklistTemplate[] {
+    return getLocal(STORAGE_KEYS.CHECKLIST_TEMPLATES, INITIAL_CHECKLIST_TEMPLATES);
+  },
+  getChecklistExecutions(): ChecklistExecution[] {
+    return getLocal(STORAGE_KEYS.CHECKLIST_EXECUTIONS, INITIAL_CHECKLIST_EXECUTIONS);
+  },
+  saveChecklistExecution(execution: ChecklistExecution): void {
+    const list = this.getChecklistExecutions();
+    list.unshift(execution);
+    setLocal(STORAGE_KEYS.CHECKLIST_EXECUTIONS, list);
+  },
+
+  // --- 13. INGESTA / FACTURAS ---
   getInvoices(): IngestedInvoice[] {
     return getLocal(STORAGE_KEYS.INVOICES, INITIAL_INVOICES);
   },
@@ -251,10 +776,6 @@ export const StorageService = {
     }
     setLocal(STORAGE_KEYS.INVOICES, invoices);
   },
-
-  /**
-   * Aprueba un ítem de factura: guarda el alias si es nuevo y agrega el precio al historial
-   */
   approveInvoiceItem(invoiceId: string, itemId: string, canonicalProductId: string): void {
     const invoice = this.getInvoiceById(invoiceId);
     if (!invoice) return;
@@ -262,121 +783,27 @@ export const StorageService = {
     const item = invoice.items.find(it => it.id === itemId);
     if (!item) return;
 
-    // 1. Guardar alias
     this.addAliasToProduct(canonicalProductId, item.raw_description);
-
-    // 2. Registrar en historial de precios
     this.recordPrice(canonicalProductId, {
       canonical_product_id: canonicalProductId,
       provider_id: invoice.provider_id,
       provider_name: invoice.provider_name,
       price_pyg: item.unit_cost_pyg,
       date: invoice.issue_date,
+      includes_iva: true,
+      iva_rate_pct: 10,
+      currency: 'PYG',
       source_type: 'invoice_photo',
       source_ref: `Factura ${invoice.invoice_number}`,
       notes: `Aprobado desde revisión de factura ${invoice.invoice_number}`,
     });
 
-    // 3. Marcar ítem como confirmado en la factura
     item.is_confirmed = true;
     item.suggested_canonical_id = canonicalProductId;
     this.saveInvoice(invoice);
   },
 
-  // --- BUDGETS / PRESUPUESTOS ---
-  getBudgets(): Budget[] {
-    return getLocal(STORAGE_KEYS.BUDGETS, INITIAL_BUDGETS);
-  },
-  getBudgetById(id: string): Budget | undefined {
-    return this.getBudgets().find(b => b.id === id);
-  },
-  saveBudget(budget: Budget): void {
-    const current = this.getBudgets();
-    const idx = current.findIndex(b => b.id === budget.id);
-    if (idx >= 0) {
-      current[idx] = budget;
-    } else {
-      current.unshift(budget);
-    }
-    setLocal(STORAGE_KEYS.BUDGETS, current);
-  },
-  updateBudget(budget: Budget): void {
-    this.saveBudget(budget);
-  },
-  deleteBudget(id: string): void {
-    const filtered = this.getBudgets().filter(b => b.id !== id);
-    setLocal(STORAGE_KEYS.BUDGETS, filtered);
-  },
-  duplicateBudget(id: string): Budget | null {
-    const original = this.getBudgetById(id);
-    if (!original) return null;
-
-    const count = this.getBudgets().length + 1;
-    const duplicated: Budget = {
-      ...original,
-      id: `b-${Date.now()}`,
-      budget_number: `COT-2026-${String(count).padStart(3, '0')}`,
-      title: `${original.title} (Copia)`,
-      status: 'draft',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      items: original.items.map((it, i) => ({
-        ...it,
-        id: `bi-${Date.now()}-${i}`,
-      })),
-    };
-
-    this.saveBudget(duplicated);
-    return duplicated;
-  },
-
-  // --- BACKUP & RESTORE (ANTI-PÉRDIDAS) ---
-  exportBackupJSON(): string {
-    const backupData = {
-      app: 'ElectroCotiza',
-      version: '1.0',
-      exported_at: new Date().toISOString(),
-      user: this.getCurrentUser(),
-      settings: this.getSettings(),
-      products: this.getProducts(),
-      budgets: this.getBudgets(),
-      clients: this.getClients(),
-      providers: this.getProviders(),
-      categories: this.getCategories(),
-      invoices: this.getInvoices(),
-    };
-    return JSON.stringify(backupData, null, 2);
-  },
-
-  importBackupJSON(jsonString: string): { success: boolean; message: string; countBudgets?: number } {
-    try {
-      const data = JSON.parse(jsonString);
-      if (!data || typeof data !== 'object') {
-        throw new Error('Formato de archivo inválido.');
-      }
-      if (data.settings) setLocal(STORAGE_KEYS.SETTINGS, data.settings);
-      if (data.products && Array.isArray(data.products)) setLocal(STORAGE_KEYS.PRODUCTS, data.products);
-      if (data.budgets && Array.isArray(data.budgets)) setLocal(STORAGE_KEYS.BUDGETS, data.budgets);
-      if (data.clients && Array.isArray(data.clients)) setLocal(STORAGE_KEYS.CLIENTS, data.clients);
-      if (data.providers && Array.isArray(data.providers)) setLocal(STORAGE_KEYS.PROVIDERS, data.providers);
-      if (data.categories && Array.isArray(data.categories)) setLocal(STORAGE_KEYS.CATEGORIES, data.categories);
-      if (data.invoices && Array.isArray(data.invoices)) setLocal(STORAGE_KEYS.INVOICES, data.invoices);
-      if (data.user) setLocal(STORAGE_KEYS.USER, data.user);
-
-      return {
-        success: true,
-        message: 'Copia de seguridad restaurada con éxito.',
-        countBudgets: data.budgets?.length || 0,
-      };
-    } catch (err: any) {
-      return {
-        success: false,
-        message: `Error al restaurar: ${err.message || 'Archivo dañado o no compatible.'}`,
-      };
-    }
-  },
-
-  // --- RESET TO FACTORY / SEED ---
+  // --- 14. RESET FACTORY ---
   resetToInitialData(): void {
     if (typeof window === 'undefined') return;
     localStorage.removeItem(STORAGE_KEYS.PRODUCTS);
@@ -386,5 +813,14 @@ export const StorageService = {
     localStorage.removeItem(STORAGE_KEYS.CATEGORIES);
     localStorage.removeItem(STORAGE_KEYS.INVOICES);
     localStorage.removeItem(STORAGE_KEYS.SETTINGS);
+    localStorage.removeItem(STORAGE_KEYS.SERVICES);
+    localStorage.removeItem(STORAGE_KEYS.WAREHOUSES);
+    localStorage.removeItem(STORAGE_KEYS.STOCKS);
+    localStorage.removeItem(STORAGE_KEYS.MOVEMENTS);
+    localStorage.removeItem(STORAGE_KEYS.PROJECTS);
+    localStorage.removeItem(STORAGE_KEYS.SERVICE_ORDERS);
+    localStorage.removeItem(STORAGE_KEYS.CHECKLIST_TEMPLATES);
+    localStorage.removeItem(STORAGE_KEYS.CHECKLIST_EXECUTIONS);
+    localStorage.removeItem(STORAGE_KEYS.AUDIT_EVENTS);
   },
 };
