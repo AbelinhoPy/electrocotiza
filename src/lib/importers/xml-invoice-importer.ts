@@ -154,7 +154,7 @@ export const XmlInvoiceImporter = {
       iva5Pyg: 0,
       items,
       isDuplicate: Boolean(duplicate),
-      duplicateMessage: duplicate ? `Factura ya registrada el ${formatDatePY(duplicate.issue_date)}.` : undefined,
+      duplicateMessage: duplicate ? `Factura ya registrada el ${duplicate.issue_date}.` : undefined,
       sourceFilename: filename,
     };
   }

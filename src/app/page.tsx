@@ -298,7 +298,7 @@ export default function DashboardPage() {
           Acceso Rápido a Módulos Conectados:
         </h2>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
           
           <Link href="/presupuestos" className="p-3.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded-xl transition-all group text-center">
             <FileText className="w-6 h-6 text-blue-700 mx-auto group-hover:scale-110 transition-transform" />
@@ -310,6 +310,12 @@ export default function DashboardPage() {
             <Briefcase className="w-6 h-6 text-blue-700 mx-auto group-hover:scale-110 transition-transform" />
             <span className="font-bold text-xs text-slate-800 block mt-2">Proyectos</span>
             <span className="text-[10px] text-slate-400">Seguimiento</span>
+          </Link>
+
+          <Link href="/finanzas" className="p-3.5 bg-slate-50 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 rounded-xl transition-all group text-center">
+            <DollarSign className="w-6 h-6 text-emerald-700 mx-auto group-hover:scale-110 transition-transform" />
+            <span className="font-bold text-xs text-slate-800 block mt-2">Finanzas</span>
+            <span className="text-[10px] text-slate-400">Hitos & Gastos</span>
           </Link>
 
           <Link href="/inventario" className="p-3.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded-xl transition-all group text-center">

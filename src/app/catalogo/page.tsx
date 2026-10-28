@@ -83,14 +83,17 @@ function CatalogoContent() {
     if (!newProdName.trim()) return;
 
     const newId = `prod-${Date.now()}`;
+    const skuCode = `PROD-${Math.floor(1000 + Math.random() * 9000)}`;
     const newProduct: CanonicalProduct = {
       id: newId,
+      internal_code: skuCode,
       category_id: newProdCategory || 'cat-cables',
-      sku: `PROD-${Math.floor(1000 + Math.random() * 9000)}`,
+      sku: skuCode,
       name: newProdName.trim(),
       normalized_name: newProdName.trim().toLowerCase(),
       brand: newProdBrand.trim() || 'Nacional',
       unit: newProdUnit,
+      is_active: true,
       base_description: `Producto registrado en obra: ${newProdName}`,
       min_price_pyg: newProdInitialPrice || 0,
       max_price_pyg: newProdInitialPrice || 0,
@@ -105,6 +108,9 @@ function CatalogoContent() {
           provider_id: 'prov-manual',
           provider_name: newProdProvider || 'Carga manual',
           price_pyg: newProdInitialPrice,
+          currency: 'PYG',
+          includes_iva: true,
+          iva_rate_pct: 10,
           date: '2026-10-16',
           source_type: 'manual',
           notes: 'Precio inicial al crear producto',

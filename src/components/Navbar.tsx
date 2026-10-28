@@ -20,7 +20,9 @@ import {
   LogOut,
   User,
   ChevronDown,
-  Shield
+  Shield,
+  DollarSign,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { StorageService } from '@/lib/data/storage';
 import { UserProfile } from '@/lib/types';
@@ -54,6 +56,7 @@ export function Navbar() {
     { href: '/', label: 'Inicio', icon: Zap },
     { href: '/presupuestos', label: 'Presupuestos', icon: FileText },
     { href: '/proyectos', label: 'Proyectos', icon: Briefcase },
+    { href: '/finanzas', label: 'Finanzas', icon: DollarSign },
     { href: '/catalogo', label: 'Precios', icon: Search },
     { href: '/inventario', label: 'Inventario', icon: Layers },
     { href: '/ordenes-servicio', label: 'Órdenes', icon: Wrench },
@@ -61,6 +64,7 @@ export function Navbar() {
     { href: '/clientes', label: 'Clientes', icon: Users },
     { href: '/proveedores', label: 'Proveedores', icon: Building2 },
     { href: '/reportes', label: 'Reportes', icon: BarChart3 },
+    { href: '/importador-xml', label: 'XML SIFEN', icon: FileSpreadsheet },
     { href: '/ingesta', label: 'Facturas', icon: UploadCloud },
     { href: '/configuracion', label: 'Ajustes', icon: SettingsIcon },
   ];

@@ -452,3 +452,203 @@ BEGIN
     END IF;
 END;
 $$ LANGUAGE plpgsql STABLE;
+
+-- ==============================================================================
+-- 16. SERVICIOS Y TARIFARIO TÉCNICO (Mano de Obra y Montajes)
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS catalog_services (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    code VARCHAR(50) NOT NULL,
+    description TEXT NOT NULL,
+    billing_unit VARCHAR(50) NOT NULL CHECK (billing_unit IN ('HORA', 'DÍA', 'BOCA', 'GLOBAL', 'M', 'UND')),
+    rate_pyg BIGINT NOT NULL CHECK (rate_pyg >= 0),
+    estimated_hours NUMERIC(8,2),
+    category VARCHAR(100) DEFAULT 'General',
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- ==============================================================================
+-- 17. PROYECTOS DE INSTALACIÓN Y MONTAJE INDUSTRIAL
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS projects (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    code VARCHAR(50) NOT NULL UNIQUE, -- ej. PROY-2026-0001
+    name VARCHAR(255) NOT NULL,
+    quote_id UUID REFERENCES budgets(id) ON DELETE SET NULL,
+    quote_number VARCHAR(50),
+    client_id UUID REFERENCES clients(id) ON DELETE RESTRICT,
+    manager_name VARCHAR(150),
+    status VARCHAR(50) DEFAULT 'planificacion' CHECK (status IN ('planificacion', 'en_ejecucion', 'en_pruebas', 'finalizado', 'suspendido')),
+    start_date DATE NOT NULL,
+    estimated_end_date DATE NOT NULL,
+    actual_end_date DATE,
+    progress_pct NUMERIC(5,2) DEFAULT 0 CHECK (progress_pct BETWEEN 0 AND 100),
+    total_contract_pyg BIGINT NOT NULL DEFAULT 0,
+    scope_changes JSONB DEFAULT '[]'::jsonb,
+    tasks JSONB DEFAULT '[]'::jsonb,
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 18. MATERIALES DE PROYECTO (Seguimiento Requerido/Recibido/Instalado)
+CREATE TABLE IF NOT EXISTS project_materials (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    material_id UUID REFERENCES canonical_products(id) ON DELETE SET NULL,
+    description TEXT NOT NULL,
+    unit VARCHAR(50) DEFAULT 'un',
+    quantity_required NUMERIC(12,2) NOT NULL DEFAULT 0,
+    quantity_received NUMERIC(12,2) NOT NULL DEFAULT 0,
+    quantity_installed NUMERIC(12,2) NOT NULL DEFAULT 0,
+    quantity_pending NUMERIC(12,2) GENERATED ALWAYS AS (quantity_required - quantity_received) STORED,
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- ==============================================================================
+-- 19. ALMACENES Y GESTIÓN MULTI-DEPÓSITO
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS warehouses (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    name VARCHAR(150) NOT NULL,
+    location TEXT,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 20. STOCK POR PRODUCTO Y ALMACÉN
+CREATE TABLE IF NOT EXISTS inventory_stocks (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    material_id UUID NOT NULL REFERENCES canonical_products(id) ON DELETE CASCADE,
+    warehouse_id UUID NOT NULL REFERENCES warehouses(id) ON DELETE CASCADE,
+    physical_stock NUMERIC(12,2) NOT NULL DEFAULT 0,
+    reserved_stock NUMERIC(12,2) NOT NULL DEFAULT 0,
+    available_stock NUMERIC(12,2) GENERATED ALWAYS AS (physical_stock - reserved_stock) STORED,
+    min_alert_stock NUMERIC(12,2) DEFAULT 0,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    CONSTRAINT uq_stock_material_warehouse UNIQUE (material_id, warehouse_id)
+);
+
+-- 21. MOVIMIENTOS KÁRDEX DE INVENTARIO
+CREATE TABLE IF NOT EXISTS inventory_movements (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    movement_number VARCHAR(50) NOT NULL,
+    movement_type VARCHAR(50) NOT NULL CHECK (movement_type IN ('entrada', 'salida', 'transferencia', 'ajuste_positivo', 'ajuste_negativo', 'reserva_proyecto', 'liberacion_reserva')),
+    material_id UUID NOT NULL REFERENCES canonical_products(id) ON DELETE RESTRICT,
+    material_name VARCHAR(255) NOT NULL,
+    source_warehouse_id UUID REFERENCES warehouses(id) ON DELETE SET NULL,
+    target_warehouse_id UUID REFERENCES warehouses(id) ON DELETE SET NULL,
+    quantity NUMERIC(12,2) NOT NULL CHECK (quantity > 0),
+    unit VARCHAR(50) DEFAULT 'un',
+    reason TEXT NOT NULL,
+    reference_document VARCHAR(100),
+    project_id UUID REFERENCES projects(id) ON DELETE SET NULL,
+    user_name VARCHAR(150) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- ==============================================================================
+-- 22. ÓRDENES DE SERVICIO TÉCNICO (OS)
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS service_orders (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    order_number VARCHAR(50) NOT NULL UNIQUE, -- ej. OS-2026-0001
+    client_id UUID NOT NULL REFERENCES clients(id) ON DELETE RESTRICT,
+    client_name VARCHAR(255) NOT NULL,
+    project_id UUID REFERENCES projects(id) ON DELETE SET NULL,
+    project_name VARCHAR(255),
+    assigned_technician VARCHAR(150) NOT NULL,
+    date DATE NOT NULL,
+    work_description TEXT NOT NULL,
+    estimated_hours NUMERIC(6,2) NOT NULL DEFAULT 0,
+    actual_hours NUMERIC(6,2),
+    materials_planned JSONB DEFAULT '[]'::jsonb,
+    materials_used JSONB DEFAULT '[]'::jsonb,
+    status VARCHAR(50) DEFAULT 'pendiente' CHECK (status IN ('pendiente', 'en_proceso', 'completada', 'cancelada')),
+    notes TEXT,
+    signature_url TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- ==============================================================================
+-- 23. PROTOCOLOS Y CHECKLISTS NORMATIVOS ANDE
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS checklist_templates (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    title VARCHAR(255) NOT NULL,
+    category VARCHAR(100) DEFAULT 'General',
+    sections JSONB NOT NULL DEFAULT '[]'::jsonb,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS checklist_executions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    template_id UUID NOT NULL REFERENCES checklist_templates(id) ON DELETE RESTRICT,
+    template_title VARCHAR(255) NOT NULL,
+    project_id UUID REFERENCES projects(id) ON DELETE SET NULL,
+    service_order_id UUID REFERENCES service_orders(id) ON DELETE SET NULL,
+    inspector_name VARCHAR(150) NOT NULL,
+    execution_date DATE NOT NULL,
+    answers JSONB NOT NULL DEFAULT '[]'::jsonb,
+    general_status VARCHAR(50) DEFAULT 'aprobado' CHECK (general_status IN ('aprobado', 'observado', 'rechazado')),
+    observations TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- ==============================================================================
+-- 24. FINANZAS: HITOS DE COBRO Y GASTOS DE PROYECTO
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS project_payment_milestones (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    description VARCHAR(255) NOT NULL, -- ej. 'Anticipo 30%', 'Entrega 40%', 'Comisionamiento 30%'
+    due_date DATE NOT NULL,
+    amount_pyg BIGINT NOT NULL CHECK (amount_pyg >= 0),
+    paid_amount_pyg BIGINT NOT NULL DEFAULT 0,
+    status VARCHAR(50) DEFAULT 'pendiente' CHECK (status IN ('pendiente', 'parcial', 'cobrado', 'vencido')),
+    payment_date DATE,
+    reference_receipt VARCHAR(100),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS project_expenses (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    date DATE NOT NULL,
+    concept TEXT NOT NULL,
+    category VARCHAR(50) NOT NULL CHECK (category IN ('material_adicional', 'transporte', 'viaticos', 'imprevisto', 'subcontrato')),
+    amount_pyg BIGINT NOT NULL CHECK (amount_pyg >= 0),
+    provider_or_recipient VARCHAR(255) NOT NULL,
+    receipt_number VARCHAR(100),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- ==============================================================================
+-- 25. AUDITORÍA INMUTABLE DE EVENTOS CRÍTICOS
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS audit_events (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    event_type VARCHAR(50) NOT NULL,
+    entity VARCHAR(100) NOT NULL,
+    entity_id VARCHAR(100) NOT NULL,
+    user_name VARCHAR(150) NOT NULL,
+    user_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    details TEXT NOT NULL,
+    previous_state JSONB,
+    new_state JSONB,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);

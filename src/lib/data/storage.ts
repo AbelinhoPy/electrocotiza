@@ -19,6 +19,8 @@ import {
   INITIAL_CHECKLIST_TEMPLATES,
   INITIAL_CHECKLIST_EXECUTIONS,
   INITIAL_AUDIT_EVENTS,
+  INITIAL_PAYMENT_MILESTONES,
+  INITIAL_PROJECT_EXPENSES,
 } from './initial-data';
 import {
   Budget,
@@ -46,6 +48,8 @@ import {
   QuoteStatus,
   QuoteRevision,
   DiscountApprovalRequest,
+  ProjectPaymentMilestone,
+  ProjectExpense,
 } from '../types';
 import { matchScore, normalizeText } from '../fuzzy';
 import { PricingEngine } from '../pricing-engine';
@@ -68,6 +72,8 @@ const STORAGE_KEYS = {
   CHECKLIST_TEMPLATES: 'electrocotiza_chk_templates_v2',
   CHECKLIST_EXECUTIONS: 'electrocotiza_chk_executions_v2',
   AUDIT_EVENTS: 'electrocotiza_audit_events_v2',
+  MILESTONES: 'electrocotiza_milestones_v2',
+  EXPENSES: 'electrocotiza_expenses_v2',
 };
 
 function getLocal<T>(key: string, fallback: T): T {
@@ -250,6 +256,43 @@ export const StorageService = {
       providers.unshift({ ...provider, last_updated: new Date().toISOString() });
     }
     setLocal(STORAGE_KEYS.PROVIDERS, providers);
+  },
+  addProvider(provider: Provider): void {
+    this.saveProvider(provider);
+  },
+  getGeminiApiKey(): string {
+    return getLocal('electrocotiza_gemini_api_key', '');
+  },
+  setGeminiApiKey(key: string): void {
+    setLocal('electrocotiza_gemini_api_key', key);
+  },
+  exportBackupJSON(): string {
+    if (typeof window === 'undefined') return '{}';
+    const backup: Record<string, any> = {};
+    for (const [k, v] of Object.entries(STORAGE_KEYS)) {
+      backup[k] = getLocal(v, null);
+    }
+    return JSON.stringify(backup, null, 2);
+  },
+  importBackupJSON(jsonStr: string): { success: boolean; message: string; countBudgets?: number } {
+    if (typeof window === 'undefined') {
+      return { success: false, message: 'Operación no disponible fuera del navegador.' };
+    }
+    try {
+      const data = JSON.parse(jsonStr);
+      let count = 0;
+      for (const [k, v] of Object.entries(STORAGE_KEYS)) {
+        if (data[k] !== undefined) {
+          setLocal(v, data[k]);
+          if (k === 'BUDGETS' && Array.isArray(data[k])) {
+            count = data[k].length;
+          }
+        }
+      }
+      return { success: true, message: 'Copia de seguridad restaurada correctamente', countBudgets: count };
+    } catch (e: any) {
+      return { success: false, message: `Error al procesar archivo JSON: ${e.message}` };
+    }
   },
 
   // --- 6. CATEGORÍAS ---
@@ -803,7 +846,39 @@ export const StorageService = {
     this.saveInvoice(invoice);
   },
 
-  // --- 14. RESET FACTORY ---
+  // --- 14. FINANZAS / HITOS Y GASTOS DE PROYECTO ---
+  getPaymentMilestones(projectId?: string): ProjectPaymentMilestone[] {
+    const list = getLocal(STORAGE_KEYS.MILESTONES, INITIAL_PAYMENT_MILESTONES);
+    if (!projectId) return list;
+    return list.filter(m => m.project_id === projectId);
+  },
+  savePaymentMilestone(milestone: ProjectPaymentMilestone): void {
+    const list = this.getPaymentMilestones();
+    const idx = list.findIndex(m => m.id === milestone.id);
+    if (idx >= 0) {
+      list[idx] = milestone;
+    } else {
+      list.push(milestone);
+    }
+    setLocal(STORAGE_KEYS.MILESTONES, list);
+  },
+  getProjectExpenses(projectId?: string): ProjectExpense[] {
+    const list = getLocal(STORAGE_KEYS.EXPENSES, INITIAL_PROJECT_EXPENSES);
+    if (!projectId) return list;
+    return list.filter(e => e.project_id === projectId);
+  },
+  saveProjectExpense(expense: ProjectExpense): void {
+    const list = this.getProjectExpenses();
+    const idx = list.findIndex(e => e.id === expense.id);
+    if (idx >= 0) {
+      list[idx] = expense;
+    } else {
+      list.unshift(expense);
+    }
+    setLocal(STORAGE_KEYS.EXPENSES, list);
+  },
+
+  // --- 15. RESET FACTORY ---
   resetToInitialData(): void {
     if (typeof window === 'undefined') return;
     localStorage.removeItem(STORAGE_KEYS.PRODUCTS);
@@ -822,5 +897,7 @@ export const StorageService = {
     localStorage.removeItem(STORAGE_KEYS.CHECKLIST_TEMPLATES);
     localStorage.removeItem(STORAGE_KEYS.CHECKLIST_EXECUTIONS);
     localStorage.removeItem(STORAGE_KEYS.AUDIT_EVENTS);
+    localStorage.removeItem(STORAGE_KEYS.MILESTONES);
+    localStorage.removeItem(STORAGE_KEYS.EXPENSES);
   },
 };

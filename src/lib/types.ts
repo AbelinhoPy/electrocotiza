@@ -46,6 +46,7 @@ export interface CompanySettings {
   default_currency: 'PYG' | 'USD';
   exchange_rate_usd_pyg: number; // Cotización Gs por USD (ej: 7950)
   default_iva_rate_pct: number; // Defecto: 10%
+  iva_rate_pct?: number; // Compatibilidad
   price_stale_days: number; // Defecto: 60 días
   // Parámetros de PDF
   pdf_gold_border: boolean;
@@ -76,7 +77,7 @@ export interface Client {
   city: string;
   address: string;
   notes?: string;
-  is_active: boolean;
+  is_active?: boolean;
   created_at?: string;
   updated_at?: string;
 }
@@ -91,14 +92,14 @@ export interface Provider {
   phone: string;
   email?: string;
   website?: string;
-  default_currency: 'PYG' | 'USD';
+  default_currency?: 'PYG' | 'USD';
   notes?: string;
-  is_active: boolean;
+  is_active?: boolean;
   last_updated?: string;
 }
 
 // --- 4. CATÁLOGO DE MATERIALES Y SERVICIOS ---
-export type UnitOfMeasure = 'UND' | 'M' | 'KM' | 'M²' | 'M³' | 'KG' | 'L' | 'JUEGO' | 'HORA' | 'DÍA' | 'un' | 'm' | 'rollo' | 'barra' | 'caja';
+export type UnitOfMeasure = 'UND' | 'M' | 'KM' | 'M²' | 'M³' | 'KG' | 'L' | 'JUEGO' | 'HORA' | 'DÍA' | 'un' | 'm' | 'rollo' | 'barra' | 'caja' | string;
 
 export interface Category {
   id: string;
@@ -124,10 +125,10 @@ export interface PriceRecord {
   provider_name: string;
   provider_product_code?: string;
   origin_description?: string;
-  currency: 'PYG' | 'USD';
+  currency?: 'PYG' | 'USD';
   price_pyg: number;
-  includes_iva: boolean;
-  iva_rate_pct: number;
+  includes_iva?: boolean;
+  iva_rate_pct?: number;
   date: string; // 'YYYY-MM-DD'
   valid_until?: string;
   source_type: 'invoice_photo' | 'invoice_pdf' | 'pdf_pricelist' | 'web_crawl' | 'manual' | 'xml_import';
@@ -138,16 +139,17 @@ export interface PriceRecord {
 
 export interface CanonicalProduct {
   id: string;
-  internal_code: string; // SKU
+  internal_code?: string; // SKU
   sku: string; // Compatibilidad
   name: string; // Descripción genérica
+  normalized_name?: string; // Búsqueda y concordancia difusa
   technical_description?: string; // Descripción técnica de ingeniería
   category_id: string;
   category_name?: string;
   brand: string;
   model?: string;
   unit: UnitOfMeasure;
-  is_active: boolean;
+  is_active?: boolean;
   image_url?: string;
   base_description: string;
   technical_doc_url?: string;

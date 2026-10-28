@@ -40,6 +40,8 @@ export default function ProveedoresPage() {
       phone: phone.trim(),
       website: website.trim(),
       notes: notes.trim(),
+      default_currency: 'PYG',
+      is_active: true,
     };
 
     StorageService.addProvider(newProv);
