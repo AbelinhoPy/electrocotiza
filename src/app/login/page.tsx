@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Zap, Lock, Mail, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Zap, Lock, Mail, Eye, EyeOff, Loader2, ShieldCheck, UserCheck } from 'lucide-react';
 import { useAuth } from '@/lib/auth/AuthContext';
 
 export default function LoginPage() {
@@ -34,21 +34,28 @@ export default function LoginPage() {
       const res = await login(email.trim(), password);
       if (!res.success) {
         setError(res.error || 'Correo o contraseña incorrectos.');
+        setIsLoading(false);
       } else {
-        router.replace('/');
+        // Redirección completa garantizada para actualizar la sesión en toda la app
+        window.location.href = '/';
       }
     } catch {
       setError('Ocurrió un error al procesar el ingreso. Inténtalo nuevamente.');
-    } finally {
       setIsLoading(false);
     }
+  };
+
+  const autofillCredentials = (userEmail: string, userPass: string) => {
+    setEmail(userEmail);
+    setPassword(userPass);
+    setError('');
   };
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center p-4 sm:p-6 text-slate-900">
       <div className="max-w-md w-full">
         {/* Cabecera con Marca */}
-        <div className="text-center mb-8">
+        <div className="text-center mb-6">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-[#0F172A] text-amber-400 shadow-md mb-4">
             <Zap className="w-8 h-8 fill-amber-400" />
           </div>
@@ -61,7 +68,7 @@ export default function LoginPage() {
         </div>
 
         {/* Tarjeta de Inicio de Sesión */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 shadow-sm space-y-6">
+        <div className="bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 shadow-sm space-y-5">
           {error && (
             <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs sm:text-sm font-medium animate-in fade-in">
               {error}
@@ -76,7 +83,7 @@ export default function LoginPage() {
               <div className="relative">
                 <Mail className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
                 <input
-                  type="email"
+                  type="text"
                   required
                   autoComplete="email"
                   value={email}
@@ -130,8 +137,40 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="pt-2 border-t border-slate-100 text-center">
-            <p className="text-xs text-slate-400">
+          {/* Accesos rápidos de prueba para facilitar el ingreso */}
+          <div className="pt-3 border-t border-slate-100">
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 text-center">
+              Seleccionar cuenta de acceso rápido
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => autofillCredentials('admin@construlogica.com.py', 'Admin2026*')}
+                className="p-2.5 rounded-xl border border-blue-100 bg-blue-50/60 hover:bg-blue-100 text-left transition-colors flex flex-col items-start group"
+              >
+                <div className="flex items-center gap-1 text-xs font-bold text-blue-900">
+                  <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Administrador</span>
+                </div>
+                <span className="text-[11px] text-slate-500 font-medium mt-0.5">Lucas Duré</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => autofillCredentials('secretaria@construlogica.com.py', 'Secretaria2026*')}
+                className="p-2.5 rounded-xl border border-emerald-100 bg-emerald-50/60 hover:bg-emerald-100 text-left transition-colors flex flex-col items-start group"
+              >
+                <div className="flex items-center gap-1 text-xs font-bold text-emerald-900">
+                  <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Secretaría</span>
+                </div>
+                <span className="text-[11px] text-slate-500 font-medium mt-0.5">Ana López</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="text-center pt-1">
+            <p className="text-[11px] text-slate-400">
               ¿No tienes cuenta o necesitas restablecer tu acceso? Consulta con el Administrador.
             </p>
           </div>

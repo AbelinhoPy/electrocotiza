@@ -23,8 +23,8 @@ let memoryUsers: AppUser[] = [
     role: 'admin',
     status: 'active',
     phone: '+595 983 530890',
-    // Hash por defecto para setup inicial: 'Admin2026!'
-    password_hash: hashPassword('Admin2026!'),
+    // Hash por defecto para setup inicial: 'Admin2026*'
+    password_hash: hashPassword('Admin2026*'),
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   },
@@ -35,7 +35,7 @@ let memoryUsers: AppUser[] = [
     role: 'secretaria',
     status: 'active',
     phone: '+595 981 778899',
-    password_hash: hashPassword('Secretaria2026!'),
+    password_hash: hashPassword('Secretaria2026*'),
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   },

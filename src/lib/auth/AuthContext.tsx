@@ -103,7 +103,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (res.ok && data.success) {
         setUser(data.user);
         syncToStorage(data.user);
-        router.replace('/');
         return { success: true };
       } else {
         return { success: false, error: data.error || 'Error al iniciar sesión' };
