@@ -70,3 +70,20 @@ export function daysSince(dateString: string): number {
     return 0;
   }
 }
+
+/**
+ * Extrae el nombre real para mostrar, removiendo prefijos profesionales (Ing., Lic., etc.)
+ * y aclaraciones entre paréntesis para el saludo cordial.
+ * Ej: "Ing. Lucas Duré" -> { first: "Lucas", full: "Lucas Duré" }
+ * Ej: "Ana López (Secretaría)" -> { first: "Ana", full: "Ana López" }
+ */
+export function getUserDisplayName(fullName?: string): { first: string; full: string } {
+  if (!fullName || typeof fullName !== 'string') return { first: 'Usuario', full: 'Usuario' };
+  let clean = fullName.replace(/\s*\([^)]*\)/g, '').trim();
+  clean = clean.replace(/^(ing\.|ing|lic\.|lic|arq\.|arq|dr\.|dr|dra\.|dra|prof\.)\s+/i, '').trim();
+  const parts = clean.split(/\s+/).filter(Boolean);
+  return {
+    first: parts[0] || 'Usuario',
+    full: clean || fullName,
+  };
+}

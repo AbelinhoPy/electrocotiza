@@ -52,6 +52,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (!password || password.trim().length < 6) {
+      return NextResponse.json(
+        { error: 'Debes ingresar una contraseña inicial de al menos 6 caracteres para la activación de la cuenta.' },
+        { status: 400 }
+      );
+    }
+
     // Verificar si ya existe
     const existing = await UserStore.getUserByEmail(email);
     if (existing) {
@@ -66,7 +73,7 @@ export async function POST(request: NextRequest) {
       email,
       full_name,
       role: assignedRole,
-      password: password || 'Electro2026!',
+      password: password.trim(),
       phone,
       status: status || 'active',
     });

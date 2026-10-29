@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { AuthProvider } from '@/lib/auth/AuthContext';
 import { AuthGuard } from '@/components/AuthGuard';
+import { AppLayout } from '@/components/AppLayout';
 
 export const metadata: Metadata = {
   title: 'ElectroCotiza - Construlogica Emprendimientos S.A.',
@@ -26,7 +27,9 @@ export default function RootLayout({
       <body className="bg-slate-50 text-slate-900 font-sans antialiased min-h-screen selection:bg-amber-400 selection:text-slate-950">
         <AuthProvider>
           <AuthGuard>
-            {children}
+            <AppLayout>
+              {children}
+            </AppLayout>
           </AuthGuard>
         </AuthProvider>
       </body>

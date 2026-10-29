@@ -32,7 +32,7 @@ import {
   ServiceOrder, 
   UserProfile 
 } from '@/lib/types';
-import { formatPYG, formatDatePY, isPriceStale } from '@/lib/utils';
+import { formatPYG, formatDatePY, isPriceStale, getUserDisplayName } from '@/lib/utils';
 import { generateClientPDF } from '@/lib/export/pdf-generator';
 import { useAuth } from '@/lib/auth/AuthContext';
 
@@ -129,7 +129,7 @@ export default function DashboardPage() {
 
   const proyectosActivos = projects.filter(p => p.status === 'en_ejecucion' || p.status === 'en_pruebas').length;
 
-  const firstName = authUser?.full_name?.split(' ')[0] || 'Bienvenido';
+  const { first: firstName, full: fullName } = getUserDisplayName(authUser?.full_name);
   const roleName = authUser?.role === 'admin' ? 'Administrador' : authUser?.role === 'secretaria' ? 'Secretaria' : authUser?.role || 'Usuario';
 
   return (
@@ -140,7 +140,7 @@ export default function DashboardPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center space-x-3">
             <div className="w-11 h-11 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center font-black text-base shadow-md shadow-amber-400/25">
-              {authUser?.full_name ? authUser.full_name.substring(0, 2).toUpperCase() : 'EC'}
+              {fullName ? fullName.substring(0, 2).toUpperCase() : 'EC'}
             </div>
             <div>
               <div className="flex items-center space-x-2">

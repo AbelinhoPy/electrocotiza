@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Zap, Lock, Mail, Eye, EyeOff, Loader2, ShieldCheck, UserCheck } from 'lucide-react';
+import { Zap, Lock, Mail, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { useAuth } from '@/lib/auth/AuthContext';
 
 export default function LoginPage() {
@@ -19,12 +19,12 @@ export default function LoginPage() {
     setError('');
 
     if (!email.trim()) {
-      setError('Por favor ingresa tu correo electrónico.');
+      setError('Por favor ingresa tu correo electrónico o usuario.');
       return;
     }
 
     if (!password) {
-      setError('Por favor ingresa tu contraseña.');
+      setError('Por favor ingresa tu contraseña de acceso.');
       return;
     }
 
@@ -45,19 +45,13 @@ export default function LoginPage() {
     }
   };
 
-  const autofillCredentials = (userEmail: string, userPass: string) => {
-    setEmail(userEmail);
-    setPassword(userPass);
-    setError('');
-  };
-
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center p-4 sm:p-6 text-slate-900">
+    <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center p-4 sm:p-6 text-slate-900 selection:bg-amber-400 selection:text-slate-950">
       <div className="max-w-md w-full">
-        {/* Cabecera con Marca */}
-        <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-[#0F172A] text-amber-400 shadow-md mb-4">
-            <Zap className="w-8 h-8 fill-amber-400" />
+        {/* Cabecera con Marca Oficial */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-[#0F172A] text-amber-400 shadow-lg shadow-slate-900/10 mb-4 ring-4 ring-amber-400/20">
+            <Zap className="w-8 h-8 fill-amber-400 text-amber-400" />
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-[#0F172A] tracking-tight">
             Ingresar a Electro<span className="text-amber-500">Cotiza</span>
@@ -68,7 +62,7 @@ export default function LoginPage() {
         </div>
 
         {/* Tarjeta de Inicio de Sesión */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 shadow-sm space-y-5">
+        <div className="bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 shadow-sm space-y-6">
           {error && (
             <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs sm:text-sm font-medium animate-in fade-in">
               {error}
@@ -78,14 +72,14 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                Correo Electrónico
+                Correo Electrónico o Usuario
               </label>
               <div className="relative">
                 <Mail className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
                 <input
                   type="text"
                   required
-                  autoComplete="email"
+                  autoComplete="username email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="usuario@construlogica.com.py"
@@ -112,7 +106,7 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 p-0.5 rounded"
+                  className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 p-0.5 rounded transition-colors"
                   tabIndex={-1}
                   aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                 >
@@ -137,41 +131,9 @@ export default function LoginPage() {
             </button>
           </form>
 
-          {/* Accesos rápidos de prueba para facilitar el ingreso */}
-          <div className="pt-3 border-t border-slate-100">
-            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 text-center">
-              Seleccionar cuenta de acceso rápido
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => autofillCredentials('admin@construlogica.com.py', 'Admin2026*')}
-                className="p-2.5 rounded-xl border border-blue-100 bg-blue-50/60 hover:bg-blue-100 text-left transition-colors flex flex-col items-start group"
-              >
-                <div className="flex items-center gap-1 text-xs font-bold text-blue-900">
-                  <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Administrador</span>
-                </div>
-                <span className="text-[11px] text-slate-500 font-medium mt-0.5">Lucas Duré</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => autofillCredentials('secretaria@construlogica.com.py', 'Secretaria2026*')}
-                className="p-2.5 rounded-xl border border-emerald-100 bg-emerald-50/60 hover:bg-emerald-100 text-left transition-colors flex flex-col items-start group"
-              >
-                <div className="flex items-center gap-1 text-xs font-bold text-emerald-900">
-                  <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Secretaría</span>
-                </div>
-                <span className="text-[11px] text-slate-500 font-medium mt-0.5">Ana López</span>
-              </button>
-            </div>
-          </div>
-
-          <div className="text-center pt-1">
-            <p className="text-[11px] text-slate-400">
-              ¿No tienes cuenta o necesitas restablecer tu acceso? Consulta con el Administrador.
+          <div className="pt-2 border-t border-slate-100 text-center">
+            <p className="text-xs text-slate-400">
+              Acceso exclusivo para personal autorizado. Si necesitas acceso o restablecer tu contraseña, contacta al Administrador.
             </p>
           </div>
         </div>

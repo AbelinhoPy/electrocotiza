@@ -435,16 +435,19 @@ export default function UsuariosPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Contraseña Inicial *</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Contraseña Inicial de Activación *</label>
                 <input
                   type="text"
                   required
-                  placeholder="Contraseña segura"
+                  placeholder="Ej: Secr2026!#"
                   value={formPassword}
                   onChange={(e) => setFormPassword(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm font-mono focus:ring-2 focus:ring-blue-600 outline-none"
                 />
-                <p className="text-[11px] text-slate-400 mt-1">El usuario podrá utilizar esta contraseña para ingresar.</p>
+                <div className="mt-2 p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-[11px] space-y-1">
+                  <p className="font-bold">Procedimiento de activación seguro:</p>
+                  <p>Al no tener servicio de correo saliente configurado, entrega esta contraseña directamente a la nueva colaboradora para su primer acceso.</p>
+                </div>
               </div>
 
               <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-100">
