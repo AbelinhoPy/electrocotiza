@@ -328,7 +328,7 @@ export default function PresupuestosPage() {
                   <th className="py-3 px-2 w-16 text-center">Ítems</th>
                   <th className="py-3 px-3 w-28 text-right">Subtotal</th>
                   <th className="py-3 px-3 w-24 text-right">IVA 10%</th>
-                  <th className="py-3 px-3 w-32 text-right">Total Facturado</th>
+                  <th className="py-3 px-3 w-32 text-right">Total Presupuesto</th>
                   <th className="py-3 px-3 w-28 text-center">Estado</th>
                   <th className="py-3 px-3 w-40 text-center">Acciones</th>
                 </tr>
@@ -457,6 +457,24 @@ export default function PresupuestosPage() {
                       <td className="py-3 px-3 text-center">
                         <div className="flex items-center justify-center space-x-1">
                           
+                          {/* Ver detalle */}
+                          <Link
+                            href={`/presupuestos/${b.id}`}
+                            title="Ver Detalle del Presupuesto"
+                            className="p-1.5 text-slate-600 hover:text-blue-800 hover:bg-slate-100 rounded-lg transition-colors"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Link>
+
+                          {/* Editar en Asistente */}
+                          <Link
+                            href={`/presupuestos/nuevo?edit=${b.id}`}
+                            title="Editar en el Asistente"
+                            className="p-1.5 text-slate-600 hover:text-blue-800 hover:bg-slate-100 rounded-lg transition-colors"
+                          >
+                            <FileEdit className="w-4 h-4" />
+                          </Link>
+
                           {/* Menú PDF */}
                           <div className="relative">
                             <button

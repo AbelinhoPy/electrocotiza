@@ -162,6 +162,18 @@ export default function PresupuestoDetallePage() {
     setTimeout(() => setCopiedBank(false), 3000);
   };
 
+  const STATUS_SPANISH: Record<string, { label: string; bg: string; text: string }> = {
+    draft: { label: 'Borrador', bg: 'bg-slate-100', text: 'text-slate-700' },
+    pending_authorization: { label: 'Pendiente de Autorización', bg: 'bg-amber-100', text: 'text-amber-800' },
+    sent: { label: 'Enviado', bg: 'bg-blue-100', text: 'text-blue-800' },
+    accepted: { label: 'Aprobado', bg: 'bg-emerald-100', text: 'text-emerald-800' },
+    rejected: { label: 'Rechazado', bg: 'bg-rose-100', text: 'text-rose-800' },
+    expired: { label: 'Vencido', bg: 'bg-orange-100', text: 'text-orange-800' },
+    cancelled: { label: 'Anulado', bg: 'bg-red-100', text: 'text-red-800' },
+  };
+
+  const statusInfo = STATUS_SPANISH[budget.status] || { label: budget.status, bg: 'bg-slate-100', text: 'text-slate-700' };
+
   return (
     <div className="max-w-6xl mx-auto px-3 sm:px-6 py-6 space-y-6">
       
@@ -176,13 +188,8 @@ export default function PresupuestoDetallePage() {
               <span className="font-mono font-bold text-xs bg-blue-100 text-blue-900 px-2 py-0.5 rounded border border-blue-200">
                 {budget.budget_number}
               </span>
-              {budget.current_revision ? (
-                <span className="text-[10px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-mono font-bold">
-                  Rev. {budget.current_revision}
-                </span>
-              ) : null}
-              <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
-                {budget.status}
+              <span className={`text-[11px] font-bold px-2 py-0.5 rounded ${statusInfo.bg} ${statusInfo.text}`}>
+                {statusInfo.label}
               </span>
             </div>
             <h1 className="text-lg sm:text-xl font-bold text-slate-900 mt-0.5">
@@ -192,6 +199,14 @@ export default function PresupuestoDetallePage() {
         </div>
 
         <div className="flex items-center space-x-2 shrink-0">
+          <Link
+            href={`/presupuestos/nuevo?edit=${budget.id}`}
+            className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-lg flex items-center space-x-1 transition-colors"
+          >
+            <Edit3 className="w-3.5 h-3.5 text-slate-600" />
+            <span>Editar presupuesto</span>
+          </Link>
+
           <button
             type="button"
             onClick={handleShareWhatsApp}
@@ -233,7 +248,7 @@ export default function PresupuestoDetallePage() {
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-          <span className="text-[11px] text-slate-400 font-bold block">Total Facturado</span>
+          <span className="text-[11px] text-slate-400 font-bold block">Total del Presupuesto</span>
           <span className="font-black font-mono text-blue-900 text-base block">{formatPYG(totals.totalSale)}</span>
           <span className="text-[10px] text-slate-500">{budget.items?.length || 0} ítems</span>
         </div>
@@ -321,8 +336,8 @@ export default function PresupuestoDetallePage() {
                 <th className="py-2.5 px-3">Descripción de Material / Trabajo</th>
                 <th className="py-2.5 px-2 w-16 text-center">Unidad</th>
                 <th className="py-2.5 px-2 w-20 text-right">Cantidad</th>
-                <th className="py-2.5 px-3 w-32 text-right">Precio Unit. (IVA Inc.)</th>
-                <th className="py-2.5 px-3 w-36 text-right">Total (Gs)</th>
+                <th className="py-2.5 px-3 w-32 text-right">Precio Unit. (Neto)</th>
+                <th className="py-2.5 px-3 w-36 text-right">Subtotal Neto (Gs)</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">

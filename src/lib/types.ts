@@ -4,7 +4,7 @@
  */
 
 // --- 1. ROLES Y USUARIOS ---
-export type Role = 'admin' | 'presupuestista' | 'vendedor' | 'tecnico' | 'consulta' | 'owner' | 'electrician' | 'assistant';
+export type Role = 'admin' | 'secretaria' | 'presupuestista' | 'vendedor' | 'tecnico' | 'consulta' | 'owner' | 'electrician' | 'assistant';
 
 export interface UserPermissions {
   canViewCosts: boolean;

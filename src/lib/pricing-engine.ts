@@ -39,6 +39,7 @@ export interface QuoteTotalsCalculation {
   subtotalNet: number;
   ivaAmount: number;
   totalSale: number;
+  totalBudget: number; // Término comercial estándar: Total del Presupuesto
   totalCost: number;
   estimatedProfit: number;
   profitMarginPct: number;
@@ -68,6 +69,22 @@ export const PricingEngine = {
     if (!includesIva || ivaRatePct <= 0) return this.round(grossPrice);
     const divisor = 1 + (ivaRatePct / 100);
     return this.round(grossPrice / divisor);
+  },
+
+  /**
+   * Calcula el precio unitario con IVA (10%) para visualización informativa
+   */
+  calculatePriceWithIva(netPrice: number, ivaRatePct = 10, currency: 'PYG' | 'USD' = 'PYG'): number {
+    if (netPrice <= 0) return 0;
+    return this.round(netPrice * (1 + (ivaRatePct / 100)), currency);
+  },
+
+  /**
+   * Extrae el precio neto a partir de un precio bruto que ya incluye IVA
+   */
+  calculateNetFromPriceWithIva(grossPrice: number, ivaRatePct = 10, currency: 'PYG' | 'USD' = 'PYG'): number {
+    if (grossPrice <= 0) return 0;
+    return this.round(grossPrice / (1 + (ivaRatePct / 100)), currency);
   },
 
   /**
@@ -379,6 +396,7 @@ export const PricingEngine = {
       subtotalNet,
       ivaAmount,
       totalSale,
+      totalBudget: totalSale, // Total del Presupuesto (Subtotal Neto + IVA 10%)
       totalCost,
       estimatedProfit,
       profitMarginPct,

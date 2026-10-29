@@ -13,20 +13,21 @@ import {
   Tag, 
   ChevronDown, 
   ChevronUp, 
-  ArrowRight,
-  RotateCcw,
-  Check,
-  Plus,
-  Key,
-  ExternalLink,
-  HelpCircle,
-  X
+  ArrowRight, 
+  RotateCcw, 
+  Check, 
+  Plus, 
+  Key, 
+  ExternalLink, 
+  HelpCircle, 
+  X,
+  FileText
 } from 'lucide-react';
 import { StorageService } from '@/lib/data/storage';
 import { CanonicalProduct, IngestedInvoice, Provider } from '@/lib/types';
 import { formatPYG, formatDatePY } from '@/lib/utils';
 
-// Compresión ultraligera en cliente (evita bloqueos en móviles y no llena almacenamiento)
+// Compresión ultraligera en cliente (evita bloqueos y optimiza memoria)
 async function compressImageFile(file: File): Promise<string> {
   return new Promise((resolve) => {
     const reader = new FileReader();
@@ -138,7 +139,7 @@ export default function IngestaPage() {
     setTimeout(() => setNotification(null), 4000);
   };
 
-  // 1. DISPARADOR AL QUITAR FOTO
+  // 1. DISPARADOR AL TOMAR FOTO O SUBIR ARCHIVO
   const handlePhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -181,7 +182,7 @@ export default function IngestaPage() {
       }
 
       if (warningType === 'missing_api_key' || !StorageService.getGeminiApiKey()) {
-        setAiWarning('💡 Modo sin IA: Puedes escribir o corregir los materiales y precios directamente aquí abajo. Para que la IA los lea sola desde la foto, vincula tu clave gratuita de Google Gemini.');
+        setAiWarning('💡 Modo sin IA: Puedes escribir o corregir los materiales y precios directamente aquí abajo. Para que la IA los reconozca automáticamente desde la foto, vincula tu clave gratuita de Google Gemini.');
       } else if (usedMethod === 'gemini_vision_ai') {
         setNotification('✨ ¡Factura y materiales extraídos con Inteligencia Artificial!');
       }
@@ -212,7 +213,7 @@ export default function IngestaPage() {
         ? extractedData.items
         : [{ raw_description: '', quantity: 1, unit: 'un', unit_cost_pyg: 0, total_pyg: 0 }];
 
-      // Preparar el borrador para que el usuario confirme y EDITE con libertad
+      // Preparar el borrador para que la secretaria confirme y edite con total libertad
       const draft = {
         provider_name: extractedData.provider_name || '',
         ruc: extractedData.ruc || '',
@@ -237,7 +238,7 @@ export default function IngestaPage() {
         }),
       };
 
-      // Si el total es 0, recalcular de la suma de ítems
+      // Recalcular si el total viene en 0
       const sumItems = draft.items.reduce((acc: number, it: any) => acc + (it.total_pyg || 0), 0);
       if (draft.total_pyg === 0 && sumItems > 0) {
         draft.total_pyg = sumItems;
@@ -310,7 +311,7 @@ export default function IngestaPage() {
     });
   };
 
-  // 2. CONFIRMAR Y GUARDAR FACTURA EXTRAÍDA POR FOTO
+  // 2. CONFIRMAR Y GUARDAR FACTURA EXTRAÍDA
   const handleConfirmScannedDraft = async () => {
     if (!scannedDraft) return;
 
@@ -340,7 +341,7 @@ export default function IngestaPage() {
       subtotal_pyg: finalTotal,
       iva_10_pyg: Math.round(finalTotal / 11),
       total_pyg: finalTotal,
-      file_url: '', // Cero fotos pesadas: 100% datos estructurados
+      file_url: '',
       file_name: `Factura ${finalInvoiceNumber}`,
       status: 'approved',
       created_at: new Date().toISOString(),
@@ -357,10 +358,9 @@ export default function IngestaPage() {
       })),
     };
 
-    // Guardar en Storage Local
     StorageService.saveInvoice(newInvoice);
 
-    // Guardar precios en el catálogo maestro
+    // Guardar precios en el catálogo de productos
     newInvoice.items.forEach(it => {
       if (it.suggested_canonical_id && it.unit_cost_pyg > 0) {
         StorageService.recordPrice(it.suggested_canonical_id, {
@@ -379,7 +379,6 @@ export default function IngestaPage() {
       }
     });
 
-    // Guardar en Neon PostgreSQL
     try {
       await fetch('/api/invoices', {
         method: 'POST',
@@ -387,7 +386,7 @@ export default function IngestaPage() {
         body: JSON.stringify(newInvoice),
       });
     } catch (e) {
-      console.warn('Sincronización en segundo plano con Neon:', e);
+      console.warn('Sincronización en segundo plano con BD:', e);
     }
 
     setNotification(`✅ Factura ${newInvoice.invoice_number} de ${newInvoice.provider_name} guardada exitosamente.`);
@@ -401,38 +400,38 @@ export default function IngestaPage() {
   const handleSaveManual = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!manualInvoiceNum.trim()) {
-      alert('Ingresa el número de factura o boleta.');
+      alert('Ingresa el número de factura');
       return;
     }
 
-    const prov = providers.find(p => p.id === manualProviderId) || providers[0];
-    const totalLines = manualItems.reduce((acc, it) => acc + (it.unit_cost_pyg * it.quantity), 0);
-    const finalTotal = manualDeclaredTotal || totalLines;
+    const provider = providers.find(p => p.id === manualProviderId) || providers[0];
+    const totalItems = manualItems.reduce((acc, it) => acc + (it.quantity * it.unit_cost_pyg), 0);
+    const finalTotal = manualDeclaredTotal > 0 ? manualDeclaredTotal : totalItems;
 
     const newInvoice: IngestedInvoice = {
-      id: `inv-man-${Date.now()}`,
-      provider_id: prov?.id || 'prov-man',
-      provider_name: prov?.name || 'Proveedor Manual',
+      id: `inv-${Date.now()}`,
+      provider_id: provider?.id || 'prov-default',
+      provider_name: provider?.name || 'Proveedor General',
       invoice_number: manualInvoiceNum.trim(),
-      timbrado: manualTimbrado.trim() || '18000000',
-      ruc: prov?.ruc || '80000000-0',
+      timbrado: manualTimbrado.trim() || '18456123',
+      ruc: provider?.ruc || '80001234-5',
       issue_date: manualDate,
       payment_condition: manualCondition,
       subtotal_pyg: finalTotal,
       iva_10_pyg: Math.round(finalTotal / 11),
       total_pyg: finalTotal,
       file_url: '',
-      file_name: 'Carga manual',
+      file_name: `Factura ${manualInvoiceNum}`,
       status: 'approved',
       created_at: new Date().toISOString(),
       items: manualItems.map((it, idx) => ({
-        id: `mi-${Date.now()}-${idx}`,
-        raw_description: it.raw_description || 'Material',
+        id: `item-${Date.now()}-${idx}`,
+        raw_description: it.raw_description.trim(),
         quantity: it.quantity,
-        unit: it.unit,
+        unit: it.unit || 'un',
         unit_cost_pyg: it.unit_cost_pyg,
         iva_rate: 10,
-        total_pyg: it.unit_cost_pyg * it.quantity,
+        total_pyg: it.quantity * it.unit_cost_pyg,
         suggested_canonical_id: it.canonical_id,
         is_confirmed: true,
       })),
@@ -440,7 +439,6 @@ export default function IngestaPage() {
 
     StorageService.saveInvoice(newInvoice);
 
-    // Actualizar catálogo
     newInvoice.items.forEach(it => {
       if (it.suggested_canonical_id && it.unit_cost_pyg > 0) {
         StorageService.recordPrice(it.suggested_canonical_id, {
@@ -454,7 +452,7 @@ export default function IngestaPage() {
           date: newInvoice.issue_date,
           source_type: 'manual',
           source_ref: `Factura ${newInvoice.invoice_number}`,
-          notes: 'Carga manual',
+          notes: 'Cargado manualmente',
         });
       }
     });
@@ -466,70 +464,71 @@ export default function IngestaPage() {
         body: JSON.stringify(newInvoice),
       });
     } catch (e) {
-      console.warn('Sincronización en segundo plano con Neon:', e);
+      console.warn('Sincronización en segundo plano con BD:', e);
     }
 
-    setNotification(`✅ Factura ${newInvoice.invoice_number} guardada exitosamente.`);
+    setNotification(`✅ Factura ${newInvoice.invoice_number} guardada.`);
     setManualInvoiceNum('');
-    setManualItems([{ raw_description: '', quantity: 1, unit: 'un', unit_cost_pyg: 0 }]);
+    setManualTimbrado('');
     setManualDeclaredTotal(0);
+    setManualItems([{ raw_description: '', quantity: 1, unit: 'un', unit_cost_pyg: 0 }]);
     loadData();
     setTimeout(() => setNotification(null), 4000);
   };
 
   return (
-    <div className="max-w-md sm:max-w-2xl lg:max-w-3xl mx-auto px-3.5 sm:px-6 py-4 sm:py-6 space-y-4">
+    <div className="max-w-4xl mx-auto px-3.5 sm:px-6 py-4 sm:py-6 space-y-5">
       
-      {/* CABECERA MÓVIL DIRECTA */}
-      <div className="flex items-center justify-between">
+      {/* CABECERA PRINCIPAL */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
         <div>
-          <div className="inline-flex items-center space-x-1.5 text-[10px] font-black text-amber-400 uppercase tracking-wider bg-amber-500/10 px-2.5 py-0.5 rounded-full border border-amber-500/20">
-            <Sparkles className="w-3 h-3" />
-            <span>Ingreso de Facturas</span>
-          </div>
-          <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight mt-1">
-            Cargar Factura de Compra
+          <h1 className="text-base sm:text-xl font-bold text-slate-900 flex items-center space-x-2">
+            <Camera className="w-5 h-5 text-blue-900" />
+            <span>Facturas de Compra</span>
           </h1>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Registra las compras de materiales para mantener los precios actualizados automáticamente
+          </p>
         </div>
 
         {/* BOTÓN RÁPIDO PARA IA / GEMINI */}
         <button
           onClick={() => setShowKeyModal(true)}
-          className={`flex items-center space-x-1 px-3 py-1.5 rounded-xl text-[11px] font-bold border transition-all ${
+          className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
             geminiApiKey 
-              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20' 
-              : 'bg-amber-400/10 border-amber-400/30 text-amber-400 hover:bg-amber-400/20'
+              ? 'bg-emerald-50 border-emerald-300 text-emerald-800 hover:bg-emerald-100' 
+              : 'bg-amber-50 border-amber-300 text-amber-800 hover:bg-amber-100'
           }`}
         >
           <Key className="w-3.5 h-3.5" />
-          <span>{geminiApiKey ? 'IA Activa' : 'Activar IA Gratis'}</span>
+          <span>{geminiApiKey ? 'IA Gemini Activa' : 'Activar IA (Opcional)'}</span>
         </button>
       </div>
 
       {/* NOTIFICACIÓN ÉXITO */}
       {notification && (
-        <div className="p-3.5 rounded-2xl bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center space-x-2 animate-in fade-in">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+        <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-900 text-xs font-bold flex items-center space-x-2">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
           <span>{notification}</span>
         </div>
       )}
 
-      {/* TABS DE SELECCIÓN (SOLO 2 OPCIONES: FOTO o MANUAL) */}
-      <div className="grid grid-cols-2 gap-2 bg-[#0F1E33] p-1 rounded-2xl border border-slate-800">
+      {/* TABS DE SELECCIÓN (TOMAR FOTO o CARGA MANUAL) */}
+      <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl border border-slate-200">
         <button
           onClick={() => {
             setActiveTab('photo');
             setScannedDraft(null);
             setAiWarning(null);
           }}
-          className={`flex items-center justify-center space-x-2 py-2.5 rounded-xl text-xs font-black transition-all ${
+          className={`flex items-center justify-center space-x-2 py-2 rounded-lg text-xs font-bold transition-all ${
             activeTab === 'photo'
-              ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/20'
-              : 'text-slate-400 hover:text-white'
+              ? 'bg-blue-900 text-white shadow-sm'
+              : 'text-slate-600 hover:text-slate-900'
           }`}
         >
           <Camera className="w-4 h-4" />
-          <span>Quitar Foto</span>
+          <span>Tomar Foto / Subir Imagen</span>
         </button>
 
         <button
@@ -538,22 +537,22 @@ export default function IngestaPage() {
             setScannedDraft(null);
             setAiWarning(null);
           }}
-          className={`flex items-center justify-center space-x-2 py-2.5 rounded-xl text-xs font-black transition-all ${
+          className={`flex items-center justify-center space-x-2 py-2 rounded-lg text-xs font-bold transition-all ${
             activeTab === 'manual'
-              ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/20'
-              : 'text-slate-400 hover:text-white'
+              ? 'bg-blue-900 text-white shadow-sm'
+              : 'text-slate-600 hover:text-slate-900'
           }`}
         >
           <Edit3 className="w-4 h-4" />
-          <span>Cargar Manual</span>
+          <span>Cargar Manualmente</span>
         </button>
       </div>
 
-      {/* MODO 1: QUITAR FOTO */}
+      {/* MODO 1: TOMAR FOTO O SUBIR IMAGEN */}
       {activeTab === 'photo' && (
         <div className="space-y-4">
           
-          {/* SI TODAVÍA NO ESCANEÓ: BOTÓN GIGANTE PARA SACAR FOTO */}
+          {/* SI TODAVÍA NO ESCANEÓ: ZONA DE CARGA */}
           {!scannedDraft ? (
             <label className="block cursor-pointer active:scale-[0.99] transition-all">
               <input
@@ -564,48 +563,48 @@ export default function IngestaPage() {
                 className="hidden"
                 disabled={isExtracting}
               />
-              <div className="bg-[#0F1E33] hover:bg-[#132742] border-2 border-dashed border-amber-400/40 hover:border-amber-400 rounded-3xl p-8 text-center space-y-4 shadow-xl">
+              <div className="bg-white hover:bg-slate-50 border-2 border-dashed border-blue-300 hover:border-blue-500 rounded-2xl p-8 text-center space-y-4 shadow-sm transition-all">
                 {isExtracting ? (
                   <div className="py-6 space-y-3">
-                    <Loader2 className="w-12 h-12 text-amber-400 animate-spin mx-auto" />
-                    <p className="text-sm font-bold text-white">Leyendo ticket con Visión Inteligente...</p>
-                    <p className="text-xs text-slate-400">Extrayendo proveedor, timbrado, materiales y precios...</p>
+                    <Loader2 className="w-10 h-10 text-blue-900 animate-spin mx-auto" />
+                    <p className="text-sm font-bold text-slate-900">Leyendo ticket con Visión Inteligente...</p>
+                    <p className="text-xs text-slate-500">Extrayendo proveedor, timbrado, materiales y precios...</p>
                   </div>
                 ) : (
                   <>
-                    <div className="w-16 h-16 rounded-3xl bg-amber-400 text-slate-950 flex items-center justify-center mx-auto shadow-lg shadow-amber-400/30">
-                      <Camera className="w-8 h-8" />
+                    <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-900 flex items-center justify-center mx-auto border border-blue-200">
+                      <Camera className="w-7 h-7" />
                     </div>
                     <div className="space-y-1">
-                      <h3 className="text-base font-black text-white">
-                        Tocar para Quitar Foto a la Factura
+                      <h3 className="text-sm sm:text-base font-bold text-slate-900">
+                        Tomar foto o subir comprobante
                       </h3>
-                      <p className="text-xs text-slate-400 max-w-xs mx-auto">
-                        Abre la cámara del celular. El sistema leerá el proveedor, total e ítems automáticamente.
+                      <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                        Haz clic aquí para tomar una foto con la cámara del celular o seleccionar una imagen desde tu dispositivo.
                       </p>
                     </div>
-                    <div className="inline-flex items-center space-x-2 bg-slate-900 border border-slate-800 text-amber-400 text-[11px] font-bold px-4 py-1.5 rounded-xl">
-                      <span>📸 Quitar foto o seleccionar imagen</span>
+                    <div className="inline-flex items-center space-x-1.5 bg-blue-900 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm">
+                      <Camera className="w-4 h-4 text-amber-400" />
+                      <span>Tomar foto o seleccionar archivo</span>
                     </div>
                   </>
                 )}
               </div>
             </label>
           ) : (
-            /* SI YA ESCANEÓ: VISTA EDITABLE Y FÁCIL PARA CONFIRMAR ANTES DE GUARDAR */
-            <div className="bg-[#0F1E33] border border-slate-800 rounded-3xl p-5 shadow-xl space-y-4 animate-in fade-in">
+            /* BORRADOR ESCANEADO EDITABLE */
+            <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-4 animate-in fade-in">
               
-              {/* ALERTA INFORMATIVA SI NO HAY IA VINCULADA */}
               {aiWarning && (
-                <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs flex items-start space-x-2">
-                  <HelpCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start space-x-2">
+                  <HelpCircle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
                   <div className="space-y-1 flex-1">
                     <span>{aiWarning}</span>
                     <div>
                       <button
                         type="button"
                         onClick={() => setShowKeyModal(true)}
-                        className="text-amber-400 underline font-bold text-[11px] hover:text-white"
+                        className="text-blue-700 underline font-bold text-[11px]"
                       >
                         🔑 Vincular clave gratuita de Google Gemini aquí
                       </button>
@@ -615,82 +614,83 @@ export default function IngestaPage() {
               )}
 
               {/* ENCABEZADO DE DATOS BÁSICOS EDITABLES */}
-              <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
-                <div>
-                  <span className="text-[10px] font-black uppercase text-amber-400 tracking-wider">
-                    Datos de la Factura
+              <div className="border-b border-slate-100 pb-3 flex items-center justify-between">
+                <div className="flex-1 mr-4">
+                  <span className="text-[11px] font-bold uppercase text-slate-500 tracking-wider block">
+                    Proveedor / Ferretería
                   </span>
                   <input
                     type="text"
                     value={scannedDraft.provider_name}
                     onChange={(e) => setScannedDraft({ ...scannedDraft, provider_name: e.target.value })}
-                    placeholder="Proveedor / Ferretería"
-                    className="bg-[#070D18] border border-slate-800 rounded-xl px-3 py-1.5 text-white font-bold text-xs mt-1 w-full focus:border-amber-400 focus:outline-none"
+                    placeholder="Ej: Record Electric S.A."
+                    className="border border-slate-300 rounded-lg px-3 py-1.5 text-slate-900 font-bold text-xs mt-1 w-full focus:ring-2 focus:ring-blue-600 focus:outline-none"
                   />
                 </div>
 
-                <div className="text-right pl-3">
-                  <span className="text-[10px] text-slate-400 font-bold block">Total Factura</span>
-                  <span className="text-base font-black text-amber-400">
+                <div className="text-right">
+                  <span className="text-[11px] text-slate-500 font-bold block">Total Factura</span>
+                  <span className="text-base font-black font-mono text-blue-900">
                     {formatPYG(scannedDraft.total_pyg)}
                   </span>
                 </div>
               </div>
 
               {/* DETALLES DE COMPROBANTE */}
-              <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="grid grid-cols-2 gap-3 text-xs">
                 <div>
-                  <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Factura Nº</label>
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">Nº Comprobante</label>
                   <input
                     type="text"
                     value={scannedDraft.invoice_number}
                     onChange={(e) => setScannedDraft({ ...scannedDraft, invoice_number: e.target.value })}
                     placeholder="001-001-0012345"
-                    className="w-full bg-[#070D18] border border-slate-800 rounded-xl px-3 py-2 text-white font-mono text-xs focus:border-amber-400 focus:outline-none"
+                    className="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-slate-900 font-mono text-xs focus:ring-2 focus:ring-blue-600 focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Fecha</label>
+                  <label className="text-[11px] font-bold text-slate-700 block mb-1">Fecha</label>
                   <input
                     type="date"
                     value={scannedDraft.issue_date}
                     onChange={(e) => setScannedDraft({ ...scannedDraft, issue_date: e.target.value })}
-                    className="w-full bg-[#070D18] border border-slate-800 rounded-xl px-3 py-2 text-white text-xs focus:border-amber-400 focus:outline-none"
+                    className="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-slate-900 text-xs focus:ring-2 focus:ring-blue-600 focus:outline-none"
                   />
                 </div>
               </div>
 
-              {/* LÍNEAS DE MATERIALES (100% EDITABLES) */}
+              {/* LÍNEAS DE MATERIALES (EDITABLES) */}
               <div className="space-y-2 pt-1">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
-                    Materiales ({scannedDraft.items.length}):
+                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+                    Materiales extraídos ({scannedDraft.items.length}):
                   </span>
                   <button
                     type="button"
                     onClick={handleAddDraftItem}
-                    className="text-amber-400 hover:text-amber-300 text-[11px] font-bold flex items-center space-x-1"
+                    className="text-blue-700 hover:underline text-xs font-bold flex items-center space-x-1"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    <span>Agregar Material</span>
+                    <span>+ Agregar material</span>
                   </button>
                 </div>
 
                 <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                   {scannedDraft.items.map((it, idx) => (
-                    <div key={idx} className="bg-[#070D18] border border-slate-800 p-2.5 rounded-2xl space-y-2">
+                    <div key={idx} className="bg-slate-50 border border-slate-200 p-3 rounded-xl space-y-2">
                       <div className="flex items-center space-x-2">
                         <input
                           type="text"
                           value={it.raw_description}
                           onChange={(e) => handleUpdateDraftItem(idx, 'raw_description', e.target.value)}
-                          placeholder="Descripción del material (ej: Cable 2.0 mm2, Llave 20A...)"
-                          className="flex-1 bg-[#0F1E33] border border-slate-800 rounded-xl px-3 py-1.5 text-white font-bold text-xs focus:border-amber-400 focus:outline-none"
+                          placeholder="Descripción del material (ej: Cable 2.5mm², Disyuntor 20A...)"
+                          className="flex-1 bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-slate-900 font-semibold text-xs focus:ring-2 focus:ring-blue-600 focus:outline-none"
                         />
                         <button
                           type="button"
                           onClick={() => handleRemoveDraftItem(idx)}
-                          className="p-1.5 text-slate-500 hover:text-red-400 rounded-lg hover:bg-red-500/10 transition-all"
+                          className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors"
+                          title="Eliminar línea"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -698,31 +698,31 @@ export default function IngestaPage() {
 
                       <div className="grid grid-cols-3 gap-2">
                         <div>
-                          <label className="text-[9px] font-bold text-slate-400 block mb-0.5">Cant.</label>
+                          <label className="text-[10px] font-bold text-slate-600 block mb-0.5">Cantidad</label>
                           <input
                             type="number"
                             min="1"
                             value={it.quantity}
                             onChange={(e) => handleUpdateDraftItem(idx, 'quantity', Number(e.target.value))}
-                            className="w-full bg-[#0F1E33] border border-slate-800 rounded-xl px-2 py-1 text-white text-xs text-center focus:border-amber-400 focus:outline-none"
+                            className="w-full bg-white border border-slate-300 rounded-lg px-2 py-1 text-slate-900 text-xs text-center font-bold"
                           />
                         </div>
 
                         <div>
-                          <label className="text-[9px] font-bold text-slate-400 block mb-0.5">Precio Unit. (₲)</label>
+                          <label className="text-[10px] font-bold text-slate-600 block mb-0.5">Precio Unit. (Gs.)</label>
                           <input
                             type="number"
                             min="0"
                             step="100"
                             value={it.unit_cost_pyg}
                             onChange={(e) => handleUpdateDraftItem(idx, 'unit_cost_pyg', Number(e.target.value))}
-                            className="w-full bg-[#0F1E33] border border-slate-800 rounded-xl px-2 py-1 text-amber-400 font-bold text-xs text-right focus:border-amber-400 focus:outline-none"
+                            className="w-full bg-white border border-slate-300 rounded-lg px-2 py-1 text-slate-900 font-mono font-bold text-xs text-right"
                           />
                         </div>
 
                         <div>
-                          <label className="text-[9px] font-bold text-slate-400 block mb-0.5">Subtotal (₲)</label>
-                          <div className="h-7 bg-[#0F1E33] border border-slate-800 rounded-xl px-2 flex items-center justify-end text-white font-black text-xs">
+                          <label className="text-[10px] font-bold text-slate-600 block mb-0.5">Subtotal (Gs.)</label>
+                          <div className="h-7 bg-white border border-slate-200 rounded-lg px-2 flex items-center justify-end text-blue-900 font-bold font-mono text-xs">
                             {formatPYG(it.total_pyg)}
                           </div>
                         </div>
@@ -733,14 +733,14 @@ export default function IngestaPage() {
               </div>
 
               {/* BOTONES DE CONFIRMACIÓN */}
-              <div className="space-y-2 pt-2">
+              <div className="space-y-2 pt-2 border-t border-slate-100 flex flex-col sm:flex-row gap-2">
                 <button
                   type="button"
                   onClick={handleConfirmScannedDraft}
-                  className="w-full flex items-center justify-center space-x-2 py-3 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black rounded-xl text-xs shadow-lg shadow-amber-400/20 active:scale-95 transition-all"
+                  className="flex-1 flex items-center justify-center space-x-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs shadow-sm transition-all"
                 >
                   <Save className="w-4 h-4" />
-                  <span>Guardar Factura y Actualizar Precios</span>
+                  <span>Guardar Factura y Actualizar Catálogo</span>
                 </button>
 
                 <button
@@ -749,10 +749,10 @@ export default function IngestaPage() {
                     setScannedDraft(null);
                     setAiWarning(null);
                   }}
-                  className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center space-x-1"
+                  className="py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition-all flex items-center justify-center space-x-1"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
-                  <span>Quitar otra foto</span>
+                  <span>Tomar otra foto</span>
                 </button>
               </div>
             </div>
@@ -763,21 +763,21 @@ export default function IngestaPage() {
 
       {/* MODO 2: CARGA MANUAL DIRECTA */}
       {activeTab === 'manual' && (
-        <form onSubmit={handleSaveManual} className="bg-[#0F1E33] border border-slate-800 rounded-3xl p-5 shadow-xl space-y-4 animate-in fade-in">
-          <div className="border-b border-slate-800 pb-2">
-            <h3 className="text-sm font-black text-white flex items-center space-x-2">
-              <Edit3 className="w-4 h-4 text-amber-400" />
-              <span>Carga Manual de Ticket</span>
+        <form onSubmit={handleSaveManual} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm space-y-4 animate-in fade-in">
+          <div className="border-b border-slate-100 pb-2">
+            <h3 className="text-sm font-bold text-slate-900 flex items-center space-x-2">
+              <Edit3 className="w-4 h-4 text-blue-900" />
+              <span>Carga Manual de Comprobante</span>
             </h3>
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-3 text-xs">
             <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Proveedor / Ferretería</label>
+              <label className="font-bold text-slate-700 block mb-1">Proveedor / Ferretería</label>
               <select
                 value={manualProviderId}
                 onChange={(e) => setManualProviderId(e.target.value)}
-                className="w-full bg-[#070D18] border border-slate-800 rounded-xl px-3 py-2 text-white text-xs focus:border-amber-400 focus:outline-none"
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-slate-900 bg-white"
               >
                 {providers.map(p => (
                   <option key={p.id} value={p.id}>{p.name} ({p.city})</option>
@@ -785,26 +785,26 @@ export default function IngestaPage() {
               </select>
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Nº Comprobante</label>
+                <label className="font-bold text-slate-700 block mb-1">Nº Comprobante</label>
                 <input
                   type="text"
                   required
                   placeholder="001-001-0012345"
                   value={manualInvoiceNum}
                   onChange={(e) => setManualInvoiceNum(e.target.value)}
-                  className="w-full bg-[#070D18] border border-slate-800 rounded-xl px-3 py-2 text-white font-mono text-xs focus:border-amber-400 focus:outline-none"
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-slate-900 font-mono"
                 />
               </div>
 
               <div>
-                <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">Fecha</label>
+                <label className="font-bold text-slate-700 block mb-1">Fecha</label>
                 <input
                   type="date"
                   value={manualDate}
                   onChange={(e) => setManualDate(e.target.value)}
-                  className="w-full bg-[#070D18] border border-slate-800 rounded-xl px-3 py-2 text-white text-xs focus:border-amber-400 focus:outline-none"
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-slate-900"
                 />
               </div>
             </div>
@@ -812,18 +812,18 @@ export default function IngestaPage() {
             {/* ÍTEMS MANUALES */}
             <div className="space-y-2 pt-1">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold text-slate-400 uppercase">Materiales</span>
+                <span className="font-bold text-slate-700 uppercase">Materiales</span>
                 <button
                   type="button"
                   onClick={() => setManualItems([...manualItems, { raw_description: '', quantity: 1, unit: 'un', unit_cost_pyg: 0 }])}
-                  className="text-amber-400 text-xs font-bold hover:underline"
+                  className="text-blue-700 font-bold hover:underline"
                 >
                   + Agregar Ítem
                 </button>
               </div>
 
               {manualItems.map((item, idx) => (
-                <div key={idx} className="bg-[#070D18] border border-slate-800 p-2.5 rounded-xl space-y-2">
+                <div key={idx} className="bg-slate-50 border border-slate-200 p-3 rounded-lg space-y-2">
                   <div className="flex items-center space-x-2">
                     <input
                       type="text"
@@ -834,13 +834,13 @@ export default function IngestaPage() {
                         next[idx].raw_description = e.target.value;
                         setManualItems(next);
                       }}
-                      className="flex-1 bg-[#0F1E33] border border-slate-800 rounded-lg px-2.5 py-1.5 text-white text-xs focus:border-amber-400 focus:outline-none"
+                      className="flex-1 bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-slate-900"
                     />
                     {manualItems.length > 1 && (
                       <button
                         type="button"
                         onClick={() => setManualItems(manualItems.filter((_, i) => i !== idx))}
-                        className="text-slate-500 hover:text-red-400"
+                        className="text-slate-400 hover:text-rose-600 p-1"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -858,21 +858,21 @@ export default function IngestaPage() {
                         next[idx].quantity = Number(e.target.value);
                         setManualItems(next);
                       }}
-                      className="bg-[#0F1E33] border border-slate-800 rounded-lg px-2.5 py-1.5 text-white text-xs focus:border-amber-400 focus:outline-none"
+                      className="bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-slate-900 text-center font-bold"
                     />
 
                     <input
                       type="number"
                       min="0"
                       step="500"
-                      placeholder="Precio Unitario (₲)"
+                      placeholder="Precio Unitario (Gs.)"
                       value={item.unit_cost_pyg || ''}
                       onChange={(e) => {
                         const next = [...manualItems];
                         next[idx].unit_cost_pyg = Number(e.target.value);
                         setManualItems(next);
                       }}
-                      className="bg-[#0F1E33] border border-slate-800 rounded-lg px-2.5 py-1.5 text-white text-xs focus:border-amber-400 focus:outline-none text-right font-mono"
+                      className="bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-slate-900 text-right font-mono font-bold"
                     />
                   </div>
                 </div>
@@ -881,7 +881,7 @@ export default function IngestaPage() {
 
             <button
               type="submit"
-              className="w-full flex items-center justify-center space-x-2 py-3 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black rounded-xl text-xs shadow-lg shadow-amber-400/20 active:scale-95 transition-all mt-3"
+              className="w-full flex items-center justify-center space-x-2 py-2.5 bg-blue-900 hover:bg-blue-800 text-white font-bold rounded-lg text-xs shadow-sm transition-all mt-3"
             >
               <Save className="w-4 h-4" />
               <span>Guardar Factura</span>
@@ -890,34 +890,34 @@ export default function IngestaPage() {
         </form>
       )}
 
-      {/* HISTORIAL PLEGABLE (NO ESTORBA) */}
+      {/* HISTORIAL PLEGABLE */}
       <div className="pt-2">
         <button
           onClick={() => setShowHistory(!showHistory)}
-          className="w-full flex items-center justify-between p-3 rounded-2xl bg-[#0F1E33] border border-slate-800 text-xs font-bold text-slate-300 hover:text-white transition-all"
+          className="w-full flex items-center justify-between p-3 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all shadow-sm"
         >
           <div className="flex items-center space-x-2">
-            <Building2 className="w-4 h-4 text-amber-400" />
+            <Building2 className="w-4 h-4 text-blue-900" />
             <span>Facturas guardadas anteriormente ({invoices.length})</span>
           </div>
           {showHistory ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
         </button>
 
         {showHistory && (
-          <div className="mt-2 space-y-2 max-h-60 overflow-y-auto pr-1 animate-in fade-in">
+          <div className="mt-2 space-y-2 max-h-60 overflow-y-auto bg-white p-3 rounded-xl border border-slate-200">
             {invoices.map((inv) => (
-              <div key={inv.id} className="bg-[#0F1E33] border border-slate-800/80 p-3 rounded-2xl flex items-center justify-between text-xs">
+              <div key={inv.id} className="p-2.5 rounded-lg border border-slate-100 bg-slate-50 flex items-center justify-between text-xs">
                 <div className="min-w-0 flex-1 mr-2">
-                  <span className="font-black text-white block truncate">{inv.provider_name}</span>
-                  <span className="text-[10px] text-slate-400 block font-mono">
+                  <span className="font-bold text-slate-900 block truncate">{inv.provider_name}</span>
+                  <span className="text-[10px] text-slate-500 block font-mono">
                     Nº {inv.invoice_number} • {formatDatePY(inv.issue_date)}
                   </span>
                 </div>
                 <div className="text-right shrink-0">
-                  <span className="font-black text-amber-400 block text-xs">
+                  <span className="font-bold font-mono text-slate-900 block text-xs">
                     {formatPYG(inv.total_pyg)}
                   </span>
-                  <span className="text-[9px] text-slate-400 block">
+                  <span className="text-[10px] text-slate-500 block">
                     {inv.items.length} materiales
                   </span>
                 </div>
@@ -929,28 +929,28 @@ export default function IngestaPage() {
 
       {/* MODAL CONFIGURACIÓN GEMINI API KEY */}
       {showKeyModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
-          <div className="bg-[#0F1E33] border border-slate-800 rounded-3xl max-w-sm w-full p-5 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white border border-slate-200 rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center space-x-2">
-                <Key className="w-4 h-4 text-amber-400" />
-                <h3 className="text-sm font-black text-white">Lector Inteligente con IA</h3>
+                <Key className="w-4 h-4 text-amber-500" />
+                <h3 className="text-sm font-bold text-slate-900">Lector Inteligente con IA</h3>
               </div>
               <button 
                 onClick={() => setShowKeyModal(false)}
-                className="text-slate-400 hover:text-white p-1"
+                className="text-slate-400 hover:text-slate-700 p-1"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <div className="space-y-3 text-xs">
-              <p className="text-slate-300 leading-relaxed">
-                Para que la cámara lea automáticamente los nombres de materiales, cantidades y precios en guaraníes, ingresa tu clave gratuita de <strong className="text-amber-400">Google Gemini API</strong>:
+              <p className="text-slate-600 leading-relaxed">
+                Para que la cámara reconozca automáticamente los nombres de materiales, cantidades y precios en guaraníes, puedes ingresar tu clave de <strong className="text-slate-900">Google Gemini API</strong>:
               </p>
 
               <div>
-                <label className="text-[10px] font-bold text-slate-400 uppercase block mb-1">
+                <label className="text-[11px] font-bold text-slate-700 block mb-1">
                   Gemini API Key
                 </label>
                 <input
@@ -958,12 +958,12 @@ export default function IngestaPage() {
                   placeholder="AIzaSy..."
                   value={tempKeyInput}
                   onChange={(e) => setTempKeyInput(e.target.value)}
-                  className="w-full bg-[#070D18] border border-slate-800 rounded-xl px-3 py-2 text-white font-mono text-xs focus:border-amber-400 focus:outline-none"
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-slate-900 font-mono text-xs focus:ring-2 focus:ring-blue-600 focus:outline-none"
                 />
               </div>
 
-              <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-[11px] text-slate-400 space-y-1">
-                <div className="flex items-center space-x-1 text-amber-400 font-bold">
+              <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-[11px] text-slate-500 space-y-1">
+                <div className="flex items-center space-x-1 text-blue-700 font-semibold">
                   <ExternalLink className="w-3 h-3" />
                   <a 
                     href="https://aistudio.google.com/app/apikey" 
@@ -981,14 +981,14 @@ export default function IngestaPage() {
                 <button
                   type="button"
                   onClick={handleSaveApiKey}
-                  className="flex-1 py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black rounded-xl text-xs transition-all"
+                  className="flex-1 py-2 bg-blue-900 hover:bg-blue-800 text-white font-bold rounded-lg text-xs transition-all shadow-sm"
                 >
                   Guardar Clave
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowKeyModal(false)}
-                  className="py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-slate-400 font-bold rounded-xl text-xs transition-all"
+                  className="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg text-xs transition-all"
                 >
                   Cerrar
                 </button>

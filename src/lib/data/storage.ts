@@ -151,6 +151,17 @@ export const StorageService = {
         canManageUsers: false,
       };
     }
+    if (role === 'secretaria') {
+      return {
+        canViewCosts: false,
+        canEditBudgets: true,
+        canApproveDiscounts: false,
+        canManageProjects: false,
+        canManageInventory: true,
+        canManageClients: true,
+        canManageUsers: false,
+      };
+    }
     if (role === 'vendedor') {
       return {
         canViewCosts: false, // Confidencialidad

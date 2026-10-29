@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  output: 'standalone',
+  output: process.env.BUILD_STANDALONE ? 'standalone' : undefined,
   images: {
     unoptimized: true,
   },

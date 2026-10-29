@@ -323,7 +323,7 @@ export async function generateClientPDF(budget: Budget, settings: CompanySetting
   applyAutoTable(doc, {
     startY: currentY,
     margin: { left: margin + 4, right: margin + 4 },
-    head: [['#', 'DESCRIPCIÓN DE MATERIALES, TRABAJOS Y SERVICIOS', 'UNIDAD', 'CANT.', 'PRECIO UNIT. (IVA INC.)', 'TOTAL']],
+    head: [['#', 'DESCRIPCIÓN DE MATERIALES, TRABAJOS Y SERVICIOS', 'UNIDAD', 'CANT.', 'PRECIO UNIT. (NETO)', 'IMPORTE (NETO)']],
     body: tableRows,
     theme: 'striped',
     headStyles: {
@@ -359,28 +359,41 @@ export async function generateClientPDF(budget: Budget, settings: CompanySetting
   doc.setFillColor(254, 243, 199);
   doc.setDrawColor(212, 175, 55);
   doc.setLineWidth(0.4);
-  doc.roundedRect(margin + 4, finalY, pageWidth - (margin + 4) * 2, 22, 2, 2, 'FD');
+  doc.roundedRect(margin + 4, finalY, pageWidth - (margin + 4) * 2, 26, 2, 2, 'FD');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(15, 33, 55);
+  doc.text('SON GUARANÍES (IVA 10% INCLUIDO):', margin + 8, finalY + 5.5);
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
-  doc.setTextColor(15, 33, 55);
-  doc.text('SON GUARANÍES (LIQUIDACIÓN DE IVA 10% INCLUIDO):', margin + 8, finalY + 6);
+  doc.setTextColor(180, 83, 9);
+  doc.text(totalLetras, margin + 8, finalY + 10.5, { maxWidth: pageWidth - margin * 2 - 70 });
+
+  // Desglose Subtotal Neto, IVA 10% y Total
+  const subtotalNeto = budget.subtotal_net_pyg || (budget.total_sale_pyg - (budget.iva_amount_pyg || 0));
+  const ivaCalculado = budget.iva_amount_pyg || Math.round(subtotalNeto * 0.10);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(71, 85, 105);
+  doc.text('Subtotal Neto:', pageWidth - margin - 58, finalY + 6);
+  doc.text(formatPYG(subtotalNeto), pageWidth - margin - 8, finalY + 6, { align: 'right' });
+
+  doc.text('IVA 10%:', pageWidth - margin - 58, finalY + 11);
+  doc.text(formatPYG(ivaCalculado), pageWidth - margin - 8, finalY + 11, { align: 'right' });
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8.5);
-  doc.setTextColor(180, 83, 9);
-  doc.text(totalLetras, margin + 8, finalY + 12);
-
-  // Cuadro Totales
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9.5);
   doc.setTextColor(15, 33, 55);
-  doc.text('TOTAL GENERAL:', pageWidth - margin - 55, finalY + 8);
-  doc.setFontSize(13);
-  doc.text(formatPYG(budget.total_sale_pyg), pageWidth - margin - 8, finalY + 16, { align: 'right' });
+  doc.text('TOTAL PRESUPUESTO:', pageWidth - margin - 58, finalY + 17);
+  doc.setFontSize(11);
+  doc.setTextColor(180, 83, 9);
+  doc.text(formatPYG(budget.total_sale_pyg), pageWidth - margin - 8, finalY + 23, { align: 'right' });
 
   // 6. CONDICIONES COMERCIALES Y DATOS BANCARIOS SIPAP
-  const condY = finalY + 27;
+  const condY = finalY + 31;
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
   doc.setTextColor(15, 33, 55);

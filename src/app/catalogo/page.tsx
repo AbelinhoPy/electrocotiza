@@ -14,11 +14,14 @@ import {
   Building2, 
   PlusCircle,
   X,
-  Sparkles
+  Package,
+  Layers,
+  ArrowUpDown
 } from 'lucide-react';
 import { StorageService } from '@/lib/data/storage';
 import { CanonicalProduct, Category, PriceRecord } from '@/lib/types';
 import { formatPYG, formatDatePY, isPriceStale, daysSince } from '@/lib/utils';
+import { PricingEngine } from '@/lib/pricing-engine';
 
 function CatalogoContent() {
   const searchParams = useSearchParams();
@@ -30,11 +33,11 @@ function CatalogoContent() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedProductHistory, setSelectedProductHistory] = useState<CanonicalProduct | null>(null);
 
-  // Modal para agregar alias nuevo
+  // Modal para agregar nombre alternativo / alias
   const [aliasModalProduct, setAliasModalProduct] = useState<CanonicalProduct | null>(null);
   const [newAliasText, setNewAliasText] = useState('');
 
-  // Modal para nuevo producto canónico
+  // Modal para agregar producto
   const [showNewProductModal, setShowNewProductModal] = useState(false);
   const [newProdName, setNewProdName] = useState('');
   const [newProdBrand, setNewProdBrand] = useState('');
@@ -42,6 +45,8 @@ function CatalogoContent() {
   const [newProdCategory, setNewProdCategory] = useState('');
   const [newProdInitialPrice, setNewProdInitialPrice] = useState<number>(0);
   const [newProdProvider, setNewProdProvider] = useState('');
+  const [newProdMargin, setNewProdMargin] = useState<number>(30);
+  const [newProdIncludesIva, setNewProdIncludesIva] = useState<boolean>(true);
 
   const loadData = () => {
     setProducts(StorageService.getProducts());
@@ -52,7 +57,7 @@ function CatalogoContent() {
     loadData();
   }, []);
 
-  // Filtrado difuso y por categoría
+  // Filtrado por texto y categoría
   const filteredProducts = useMemo(() => {
     let result = products;
 
@@ -80,10 +85,17 @@ function CatalogoContent() {
 
   const handleCreateProductSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newProdName.trim()) return;
+    if (!newProdName.trim()) {
+      alert('Ingresa el nombre del producto.');
+      return;
+    }
 
     const newId = `prod-${Date.now()}`;
     const skuCode = `PROD-${Math.floor(1000 + Math.random() * 9000)}`;
+    const cost = Number(newProdInitialPrice) || 0;
+    const normalizedCost = PricingEngine.normalizePurchaseCost(cost, newProdIncludesIva, 10);
+    const today = new Date().toISOString().split('T')[0];
+
     const newProduct: CanonicalProduct = {
       id: newId,
       internal_code: skuCode,
@@ -94,26 +106,26 @@ function CatalogoContent() {
       brand: newProdBrand.trim() || 'Nacional',
       unit: newProdUnit,
       is_active: true,
-      base_description: `Producto registrado en obra: ${newProdName}`,
-      min_price_pyg: newProdInitialPrice || 0,
-      max_price_pyg: newProdInitialPrice || 0,
-      last_price_pyg: newProdInitialPrice || 0,
-      last_price_date: '2026-10-16',
-      last_provider_name: newProdProvider || 'Proveedor local',
+      base_description: `Material eléctrico: ${newProdName}`,
+      min_price_pyg: normalizedCost,
+      max_price_pyg: normalizedCost,
+      last_price_pyg: normalizedCost,
+      last_price_date: today,
+      last_provider_name: newProdProvider.trim() || 'Proveedor local',
       aliases: [newProdName.trim()],
-      history: newProdInitialPrice ? [
+      history: cost ? [
         {
           id: `h-${Date.now()}`,
           canonical_product_id: newId,
           provider_id: 'prov-manual',
-          provider_name: newProdProvider || 'Carga manual',
-          price_pyg: newProdInitialPrice,
+          provider_name: newProdProvider.trim() || 'Carga manual',
+          price_pyg: normalizedCost,
           currency: 'PYG',
-          includes_iva: true,
+          includes_iva: newProdIncludesIva,
           iva_rate_pct: 10,
-          date: '2026-10-16',
+          date: today,
           source_type: 'manual',
-          notes: 'Precio inicial al crear producto',
+          notes: 'Precio inicial al registrar producto',
         }
       ] : [],
     };
@@ -123,48 +135,50 @@ function CatalogoContent() {
     setNewProdName('');
     setNewProdBrand('');
     setNewProdInitialPrice(0);
+    setNewProdProvider('');
     loadData();
+    alert(`Producto "${newProduct.name}" registrado correctamente.`);
   };
 
   return (
-    <div className="max-w-md sm:max-w-2xl lg:max-w-6xl mx-auto px-3.5 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
+    <div className="max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-5">
       
-      {/* ENCABEZADO MÓVIL */}
-      <div className="flex items-center justify-between">
+      {/* CABECERA PRINCIPAL */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
         <div>
-          <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center space-x-2">
-            <Search className="w-5 h-5 text-amber-400" />
-            <span>Precios y Materiales</span>
+          <h1 className="text-base sm:text-xl font-bold text-slate-900 flex items-center space-x-2">
+            <Package className="w-5 h-5 text-blue-900" />
+            <span>Productos y Precios</span>
           </h1>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Catálogo unificado de ferreterías de CDE y Asunción
+          <p className="text-xs text-slate-500 mt-0.5">
+            Catálogo de materiales eléctricos y servicios con precios de proveedores en Paraguay
           </p>
         </div>
 
         <button
           onClick={() => setShowNewProductModal(true)}
-          className="inline-flex items-center space-x-1.5 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 active:scale-95 text-slate-950 font-black px-3.5 py-2 rounded-2xl text-xs shadow-md shadow-amber-500/20 transition-all"
+          className="inline-flex items-center space-x-1.5 bg-blue-900 hover:bg-blue-800 active:scale-95 text-white font-bold px-4 py-2 rounded-lg text-xs shadow-sm transition-all"
         >
-          <Plus className="w-4 h-4 stroke-[3]" />
-          <span>+ Crear</span>
+          <Plus className="w-4 h-4 text-amber-400" />
+          <span>+ Agregar producto</span>
         </button>
       </div>
 
-      {/* BUSCADOR DIFUSO Y FILTROS */}
-      <div className="space-y-2.5">
+      {/* BUSCADOR Y FILTROS */}
+      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
         <div className="relative">
-          <Search className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
+          <Search className="absolute left-3.5 top-2.5 w-4 h-4 text-slate-400" />
           <input
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar por calibre, marca, o nombre de ticket..."
-            className="w-full pl-10 pr-9 py-2.5 bg-slate-900/90 text-white rounded-2xl border border-slate-700/80 focus:outline-none focus:ring-2 focus:ring-amber-400 text-xs sm:text-sm placeholder-slate-500 shadow-inner"
+            placeholder="Buscar por nombre, código, marca (ej: cable 4mm, disyuntor, caño corrugado, cinta aisladora)..."
+            className="w-full pl-10 pr-9 py-2 bg-slate-50 text-slate-900 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-600 text-xs placeholder-slate-400"
           />
           {query && (
             <button
               onClick={() => setQuery('')}
-              className="absolute right-3 top-2.5 text-slate-400 hover:text-white"
+              className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-700"
             >
               <X className="w-4 h-4" />
             </button>
@@ -172,13 +186,13 @@ function CatalogoContent() {
         </div>
 
         {/* PILLS DE CATEGORÍAS */}
-        <div className="flex items-center space-x-2 overflow-x-auto pb-1 scrollbar-none">
+        <div className="flex items-center space-x-1.5 overflow-x-auto pb-1">
           <button
             onClick={() => setSelectedCategory('all')}
-            className={`px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all active:scale-95 ${
+            className={`px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
               selectedCategory === 'all'
-                ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/20'
-                : 'bg-[#0F1E33] border border-slate-800 text-slate-400 hover:text-white'
+                ? 'bg-blue-900 text-white'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
           >
             Todos ({products.length})
@@ -187,10 +201,10 @@ function CatalogoContent() {
             <button
               key={cat.id}
               onClick={() => setSelectedCategory(cat.id)}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all active:scale-95 ${
+              className={`px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
                 selectedCategory === cat.id
-                  ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/20'
-                  : 'bg-[#0F1E33] border border-slate-800 text-slate-400 hover:text-white'
+                  ? 'bg-blue-900 text-white'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
               }`}
             >
               {cat.name}
@@ -199,156 +213,297 @@ function CatalogoContent() {
         </div>
       </div>
 
-      {/* GRILLA DE TARJETAS MÓVILES DE MATERIALES */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-        {filteredProducts.map((p) => {
-          const isStale = isPriceStale(p.last_price_date, 60);
-          const daysOld = daysSince(p.last_price_date);
+      {/* TABLA COMPACTA ADMINISTRATIVA */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        {filteredProducts.length === 0 ? (
+          <div className="p-12 text-center space-y-3">
+            <Package className="w-12 h-12 text-slate-300 mx-auto" />
+            <h3 className="font-bold text-sm text-slate-700">No encontramos productos</h3>
+            <p className="text-xs text-slate-500 max-w-sm mx-auto">
+              Intenta con otra búsqueda o agrega un nuevo producto al catálogo.
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs text-left">
+              <thead className="bg-[#0F2137] text-white font-bold">
+                <tr>
+                  <th className="py-2.5 px-3 w-28">Código</th>
+                  <th className="py-2.5 px-3">Producto / Material</th>
+                  <th className="py-2.5 px-3 w-24">Marca</th>
+                  <th className="py-2.5 px-2 w-16 text-center">Unidad</th>
+                  <th className="py-2.5 px-3">Proveedor referencia</th>
+                  <th className="py-2.5 px-3 w-28 text-right">Precio compra</th>
+                  <th className="py-2.5 px-3 w-28 text-right">Venta sugerida</th>
+                  <th className="py-2.5 px-3 w-28 text-center">Cotización</th>
+                  <th className="py-2.5 px-3 w-28 text-center">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredProducts.map((p) => {
+                  const isStale = isPriceStale(p.last_price_date, 60);
+                  const daysOld = daysSince(p.last_price_date);
+                  const suggestedSaleNet = PricingEngine.calculateSalePriceFromMargin(p.last_price_pyg || 0, 30);
 
-          return (
-            <div
-              key={p.id}
-              className="bg-[#0F1E33] rounded-3xl border border-slate-800 p-4 shadow-xl flex flex-col justify-between space-y-3 hover:border-slate-700 transition-all"
-            >
-              <div className="space-y-2">
-                {/* Categoría y Alerta de Antigüedad */}
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-bold text-slate-300 bg-slate-900 px-2.5 py-0.5 rounded-lg border border-slate-800 text-[10px]">
-                    {p.brand} • {p.unit}
-                  </span>
+                  return (
+                    <tr key={p.id} className="hover:bg-slate-50 transition-colors">
+                      {/* Código */}
+                      <td className="py-2.5 px-3 font-mono font-bold text-slate-600 text-[11px]">
+                        {p.internal_code || p.sku}
+                      </td>
 
-                  {isStale ? (
-                    <span className="inline-flex items-center space-x-1 text-[10px] font-bold text-amber-300 bg-amber-500/20 border border-amber-500/30 px-2 py-0.5 rounded-full">
-                      <Clock className="w-3 h-3" />
-                      <span>{daysOld}d (Viejo)</span>
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center space-x-1 text-[10px] font-bold text-emerald-300 bg-emerald-500/20 border border-emerald-500/30 px-2 py-0.5 rounded-full">
-                      <Check className="w-3 h-3" />
-                      <span>Actual</span>
-                    </span>
-                  )}
-                </div>
+                      {/* Producto */}
+                      <td className="py-2.5 px-3">
+                        <span className="font-bold text-slate-900 block">{p.name}</span>
+                        {p.aliases && p.aliases.length > 1 && (
+                          <span className="text-[10px] text-slate-400 block truncate max-w-xs">
+                            Alias: {p.aliases.join(', ')}
+                          </span>
+                        )}
+                      </td>
 
-                {/* Nombre Canónico */}
-                <h3 className="font-black text-white text-sm leading-snug">
-                  {p.name}
-                </h3>
+                      {/* Marca */}
+                      <td className="py-2.5 px-3 font-semibold text-slate-700">
+                        {p.brand || 'Nacional'}
+                      </td>
 
-                <p className="text-[11px] text-slate-400 line-clamp-2">
-                  {p.base_description}
-                </p>
+                      {/* Unidad */}
+                      <td className="py-2.5 px-2 text-center text-slate-600 font-semibold">
+                        {p.unit}
+                      </td>
 
-                {/* ALIAS HOMOLOGADOS */}
-                <div className="pt-2 border-t border-slate-800/80 space-y-1">
-                  <div className="flex items-center justify-between text-[10px] text-slate-400">
-                    <span className="font-bold flex items-center space-x-1">
-                      <Tag className="w-3 h-3 text-amber-400" />
-                      <span>Nombres en Ferreterías ({p.aliases.length}):</span>
-                    </span>
-                    <button
-                      onClick={() => setAliasModalProduct(p)}
-                      className="text-amber-400 hover:text-amber-300 font-bold hover:underline"
-                    >
-                      + Vincular
-                    </button>
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    {p.aliases.slice(0, 2).map((alias, i) => (
-                      <span
-                        key={i}
-                        className="text-[10px] bg-slate-900 text-slate-300 px-2 py-0.5 rounded-md border border-slate-800 font-mono truncate max-w-[200px]"
-                      >
-                        {alias}
-                      </span>
-                    ))}
-                    {p.aliases.length > 2 && (
-                      <span className="text-[10px] text-slate-500 self-center">
-                        +{p.aliases.length - 2}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
+                      {/* Proveedor */}
+                      <td className="py-2.5 px-3 text-slate-700">
+                        {p.last_provider_name || 'Proveedor local'}
+                      </td>
 
-              {/* PRECIO Y ACCIONES */}
-              <div className="pt-2.5 border-t border-slate-800/80 flex items-center justify-between">
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                    {p.last_provider_name || 'Proveedor local'}
-                  </span>
-                  <div className="text-base font-black text-amber-400">
-                    {formatPYG(p.last_price_pyg)}{' '}
-                    <span className="text-[11px] font-normal text-slate-400">/ {p.unit}</span>
-                  </div>
-                </div>
+                      {/* Precio de compra */}
+                      <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-800">
+                        {formatPYG(p.last_price_pyg)}
+                      </td>
 
-                <button
-                  onClick={() => setSelectedProductHistory(p)}
-                  className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold flex items-center space-x-1 border border-slate-700 active:scale-95 transition-all"
-                  title="Ver comparativa de ferreterías"
-                >
-                  <History className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Precios</span>
-                </button>
-              </div>
+                      {/* Precio de venta neto sugerido (30%) */}
+                      <td className="py-2.5 px-3 text-right font-mono font-bold text-blue-900">
+                        {formatPYG(suggestedSaleNet)}
+                      </td>
 
-            </div>
-          );
-        })}
+                      {/* Antigüedad de precio */}
+                      <td className="py-2.5 px-3 text-center">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          isStale 
+                            ? 'bg-amber-100 text-amber-800 border border-amber-200' 
+                            : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                        }`}>
+                          {isStale ? `${daysOld}d (Revisar)` : 'Vigente'}
+                        </span>
+                      </td>
+
+                      {/* Acciones */}
+                      <td className="py-2.5 px-3 text-center">
+                        <div className="flex items-center justify-center space-x-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedProductHistory(p)}
+                            title="Ver historial de precios"
+                            className="p-1 text-slate-600 hover:text-blue-700 hover:bg-slate-100 rounded"
+                          >
+                            <History className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setAliasModalProduct(p)}
+                            title="Agregar nombre alternativo"
+                            className="p-1 text-slate-600 hover:text-blue-700 hover:bg-slate-100 rounded"
+                          >
+                            <Tag className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
-      {/* MODAL HISTORIAL DE PRECIOS */}
-      {selectedProductHistory && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#0F1E33] rounded-3xl max-w-lg w-full max-h-[85vh] overflow-hidden flex flex-col shadow-2xl border border-slate-700 animate-in fade-in zoom-in-95 duration-200">
-            <div className="p-4 sm:p-5 bg-[#0A1526] text-white flex items-center justify-between border-b border-slate-800">
+      {/* MODAL: REGISTRAR PRODUCTO */}
+      {showNewProductModal && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-5 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
-                <span className="text-[10px] text-amber-400 font-black tracking-wider uppercase">Historial de Compras en CDE</span>
-                <h3 className="font-bold text-sm sm:text-base text-white">{selectedProductHistory.name}</h3>
+                <h3 className="font-bold text-sm text-slate-900">Agregar nuevo producto</h3>
+                <p className="text-xs text-slate-500">Registra un material con su precio de compra y margen de venta</p>
               </div>
               <button
-                onClick={() => setSelectedProductHistory(null)}
-                className="text-slate-400 hover:text-white p-1 rounded-xl bg-slate-800"
+                type="button"
+                onClick={() => setShowNewProductModal(false)}
+                className="p-1 text-slate-400 hover:text-slate-700"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-4 overflow-y-auto space-y-2.5">
-              {selectedProductHistory.history && selectedProductHistory.history.length > 0 ? (
-                selectedProductHistory.history.map((h, i) => (
-                  <div
-                    key={h.id || i}
-                    className="p-3 rounded-2xl border border-slate-800 bg-slate-900/80 flex items-center justify-between"
-                  >
-                    <div className="space-y-0.5">
-                      <div className="flex items-center space-x-1.5">
-                        <Building2 className="w-3.5 h-3.5 text-amber-400" />
-                        <span className="font-bold text-xs text-white">{h.provider_name}</span>
-                      </div>
-                      <p className="text-[10px] text-slate-400">
-                        {formatDatePY(h.date)} • {h.notes || h.source_type}
-                      </p>
-                    </div>
+            <form onSubmit={handleCreateProductSubmit} className="space-y-3 text-xs">
+              <div>
+                <label className="font-bold text-slate-700 mb-1 block">Nombre del producto *</label>
+                <input
+                  type="text"
+                  required
+                  value={newProdName}
+                  onChange={e => setNewProdName(e.target.value)}
+                  placeholder="Ej: Llave termomagnética bipolar 25A"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600"
+                />
+              </div>
 
-                    <div className="text-right">
-                      <div className="text-sm font-black text-amber-400">
-                        {formatPYG(h.price_pyg)}
-                      </div>
-                      <span className="text-[9px] text-slate-500">IVA incluido</span>
-                    </div>
-                  </div>
-                ))
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 mb-1 block">Marca</label>
+                  <input
+                    type="text"
+                    value={newProdBrand}
+                    onChange={e => setNewProdBrand(e.target.value)}
+                    placeholder="Ej: ABB, Schneider, Tigre..."
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 mb-1 block">Unidad de medida</label>
+                  <select
+                    value={newProdUnit}
+                    onChange={e => setNewProdUnit(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"
+                  >
+                    <option value="un">Unidad (un)</option>
+                    <option value="m">Metros (m)</option>
+                    <option value="rollo">Rollo</option>
+                    <option value="kg">Kilogramos (kg)</option>
+                    <option value="juego">Juego</option>
+                    <option value="gl">Global</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 mb-1 block">Precio de compra (Gs.)</label>
+                  <input
+                    type="number"
+                    value={newProdInitialPrice}
+                    onChange={e => setNewProdInitialPrice(Number(e.target.value) || 0)}
+                    placeholder="0"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 mb-1 block">Margen venta sugerido (%)</label>
+                  <input
+                    type="number"
+                    value={newProdMargin}
+                    onChange={e => setNewProdMargin(Number(e.target.value) || 30)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 mb-1 block">Proveedor habitual</label>
+                  <input
+                    type="text"
+                    value={newProdProvider}
+                    onChange={e => setNewProdProvider(e.target.value)}
+                    placeholder="Ej: Record Electric, Enerluz..."
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 mb-1 block">Tratamiento del IVA</label>
+                  <select
+                    value={newProdIncludesIva ? 'included' : 'net'}
+                    onChange={e => setNewProdIncludesIva(e.target.value === 'included')}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"
+                  >
+                    <option value="included">Precio de compra incluye IVA 10%</option>
+                    <option value="net">Precio de compra es Neto (sin IVA)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="pt-2 flex justify-end space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setShowNewProductModal(false)}
+                  className="px-3.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-blue-900 hover:bg-blue-800 text-white font-bold text-xs rounded-lg shadow-sm"
+                >
+                  Guardar producto
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: HISTORIAL DE PRECIOS */}
+      {selectedProductHistory && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-5 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="font-bold text-sm text-slate-900">Historial de cotizaciones</h3>
+                <p className="text-xs text-slate-500">{selectedProductHistory.name}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedProductHistory(null)}
+                className="p-1 text-slate-400 hover:text-slate-700"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {(!selectedProductHistory.history || selectedProductHistory.history.length === 0) ? (
+                <div className="bg-slate-50 p-6 text-center text-xs text-slate-500 rounded-xl">
+                  No hay cotizaciones previas registradas para este producto.
+                </div>
               ) : (
-                <p className="text-xs text-slate-400 italic text-center py-4">No hay compras previas registradas.</p>
+                <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                  {selectedProductHistory.history.map((h) => (
+                    <div
+                      key={h.id}
+                      className="p-3 rounded-lg border border-slate-200 bg-slate-50/70 flex items-center justify-between text-xs"
+                    >
+                      <div>
+                        <span className="font-bold text-slate-900 block">{h.provider_name}</span>
+                        <span className="text-[10px] text-slate-500">{formatDatePY(h.date)} • {h.notes || 'Cotización'}</span>
+                      </div>
+                      <span className="font-mono font-bold text-slate-900 text-sm">
+                        {formatPYG(h.price_pyg)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
 
-            <div className="p-3 bg-[#0A1526] border-t border-slate-800 flex justify-end">
+            <div className="pt-2 flex justify-end">
               <button
+                type="button"
                 onClick={() => setSelectedProductHistory(null)}
-                className="px-4 py-2 bg-amber-400 text-slate-950 font-black rounded-xl text-xs active:scale-95"
+                className="px-3.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg"
               >
                 Cerrar
               </button>
@@ -357,137 +512,61 @@ function CatalogoContent() {
         </div>
       )}
 
-      {/* MODAL AGREGAR ALIAS */}
+      {/* MODAL: AGREGAR NOMBRE ALTERNATIVO (ALIAS) */}
       {aliasModalProduct && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#0F1E33] rounded-3xl max-w-md w-full p-5 shadow-2xl border border-slate-700 space-y-4">
-            <div>
-              <span className="text-[10px] font-black text-amber-400 uppercase tracking-wider">Homologar Material</span>
-              <h3 className="text-sm font-bold text-white mt-0.5">
-                Vincular nombre para: <br />
-                <span className="text-amber-300 font-extrabold">{aliasModalProduct.name}</span>
-              </h3>
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="font-bold text-sm text-slate-900">Nombres alternativos del producto</h3>
+                <p className="text-xs text-slate-500">{aliasModalProduct.name}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAliasModalProduct(null)}
+                className="p-1 text-slate-400 hover:text-slate-700"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
-            <form onSubmit={handleAddAliasSubmit} className="space-y-3">
+            <div className="space-y-2">
+              <span className="text-xs font-bold text-slate-700 block">Nombres reconocidos actualmente:</span>
+              <div className="flex flex-wrap gap-1.5">
+                {aliasModalProduct.aliases.map((al, idx) => (
+                  <span key={idx} className="bg-slate-100 text-slate-800 px-2 py-0.5 rounded text-[11px] font-semibold border border-slate-200">
+                    {al}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <form onSubmit={handleAddAliasSubmit} className="space-y-3 pt-2">
               <div>
-                <label className="block text-[11px] font-bold text-slate-300 mb-1">
-                  Nombre en la factura o ticket:
-                </label>
+                <label className="text-xs font-bold text-slate-700 mb-1 block">Agregar otro nombre o descripción de factura:</label>
                 <input
                   type="text"
                   required
                   value={newAliasText}
-                  onChange={(e) => setNewAliasText(e.target.value)}
-                  placeholder="Ej: CABLE 1X2.5 ROJO CONDEL PY..."
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:ring-2 focus:ring-amber-400 focus:outline-none"
+                  onChange={e => setNewAliasText(e.target.value)}
+                  placeholder="Ej: Termomagnetica 2x25A"
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg"
                 />
               </div>
 
-              <div className="flex items-center justify-end space-x-2 pt-2">
+              <div className="flex justify-end space-x-2">
                 <button
                   type="button"
                   onClick={() => setAliasModalProduct(null)}
-                  className="px-3.5 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-white"
+                  className="px-3.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl text-xs font-black bg-amber-400 hover:bg-amber-300 text-slate-950 active:scale-95"
+                  className="px-4 py-2 bg-blue-900 hover:bg-blue-800 text-white font-bold text-xs rounded-lg shadow-sm"
                 >
-                  Guardar
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL NUEVO PRODUCTO CANÓNICO */}
-      {showNewProductModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#0F1E33] rounded-3xl max-w-md w-full p-5 shadow-2xl border border-slate-700 space-y-3.5">
-            <div>
-              <span className="text-[10px] font-black text-amber-400 uppercase tracking-wider">Catálogo Maestro</span>
-              <h3 className="text-sm font-black text-white mt-0.5">Crear Nuevo Material Maestro</h3>
-            </div>
-
-            <form onSubmit={handleCreateProductSubmit} className="space-y-3">
-              <div>
-                <label className="block text-[11px] font-bold text-slate-300 mb-1">Nombre Oficial Estandarizado:</label>
-                <input
-                  type="text"
-                  required
-                  value={newProdName}
-                  onChange={(e) => setNewProdName(e.target.value)}
-                  placeholder="Ej: Cable Unipolar 6.0 mm² Cobre"
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:ring-2 focus:ring-amber-400 focus:outline-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-300 mb-1">Marca / Procedencia:</label>
-                  <input
-                    type="text"
-                    value={newProdBrand}
-                    onChange={(e) => setNewProdBrand(e.target.value)}
-                    placeholder="Condel / Nexans"
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:ring-2 focus:ring-amber-400 focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-300 mb-1">Unidad de Medida:</label>
-                  <select
-                    value={newProdUnit}
-                    onChange={(e) => setNewProdUnit(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:ring-2 focus:ring-amber-400 focus:outline-none"
-                  >
-                    <option value="un">un (unidad)</option>
-                    <option value="m">m (metro)</option>
-                    <option value="rollo">rollo</option>
-                    <option value="barra">barra</option>
-                    <option value="kg">kg</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-slate-300 mb-1">Precio Unitario Inicial (₲ con IVA):</label>
-                <input
-                  type="number"
-                  value={newProdInitialPrice || ''}
-                  onChange={(e) => setNewProdInitialPrice(Number(e.target.value))}
-                  placeholder="3500"
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:ring-2 focus:ring-amber-400 focus:outline-none font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-slate-300 mb-1">Ferretería / Proveedor:</label>
-                <input
-                  type="text"
-                  value={newProdProvider}
-                  onChange={(e) => setNewProdProvider(e.target.value)}
-                  placeholder="Enerluz / Fixopar"
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:ring-2 focus:ring-amber-400 focus:outline-none"
-                />
-              </div>
-
-              <div className="flex items-center justify-end space-x-2 pt-2 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setShowNewProductModal(false)}
-                  className="px-3.5 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-white"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 rounded-xl text-xs font-black bg-amber-400 hover:bg-amber-300 text-slate-950 active:scale-95"
-                >
-                  Crear Producto
+                  Guardar nombre
                 </button>
               </div>
             </form>
@@ -502,8 +581,8 @@ function CatalogoContent() {
 export default function CatalogoPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-[50vh] flex items-center justify-center text-xs text-slate-400">
-        Cargando catálogo maestro...
+      <div className="min-h-[50vh] flex items-center justify-center text-xs text-slate-500 font-semibold">
+        Cargando catálogo de productos y precios...
       </div>
     }>
       <CatalogoContent />

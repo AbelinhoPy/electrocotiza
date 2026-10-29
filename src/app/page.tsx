@@ -7,77 +7,71 @@ import {
   Search, 
   Plus, 
   FileText, 
-  TrendingDown, 
   CheckCircle2, 
   ArrowRight, 
-  ShieldAlert, 
   Download, 
-  Building, 
-  Sparkles, 
-  Receipt, 
-  Camera, 
   Share2, 
-  Copy, 
-  Zap, 
   Briefcase, 
   Layers, 
   Wrench, 
   ShieldCheck, 
   BarChart3, 
   Users, 
-  Clock, 
-  AlertTriangle, 
   DollarSign, 
-  Building2 
+  Package, 
+  Camera, 
+  Building2,
+  Clock,
+  Sparkles
 } from 'lucide-react';
 import { StorageService } from '@/lib/data/storage';
 import { 
   Budget, 
-  IngestedInvoice, 
   CanonicalProduct, 
-  UserProfile, 
   Project, 
   ServiceOrder, 
-  InventoryStock 
+  UserProfile 
 } from '@/lib/types';
 import { formatPYG, formatDatePY, isPriceStale } from '@/lib/utils';
 import { generateClientPDF } from '@/lib/export/pdf-generator';
+import { useAuth } from '@/lib/auth/AuthContext';
+
+const STATUS_SPANISH: Record<string, { label: string; bg: string; text: string }> = {
+  draft: { label: 'Borrador', bg: 'bg-slate-100', text: 'text-slate-700' },
+  pending_authorization: { label: 'Pend. Autorización', bg: 'bg-amber-100', text: 'text-amber-800' },
+  sent: { label: 'Enviado', bg: 'bg-blue-100', text: 'text-blue-800' },
+  accepted: { label: 'Aprobado', bg: 'bg-emerald-100', text: 'text-emerald-800' },
+  rejected: { label: 'Rechazado', bg: 'bg-rose-100', text: 'text-rose-800' },
+  expired: { label: 'Vencido', bg: 'bg-orange-100', text: 'text-orange-800' },
+  cancelled: { label: 'Anulado', bg: 'bg-red-100', text: 'text-red-800' },
+};
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
-  const [permissions, setPermissions] = useState(StorageService.getUserPermissions(null));
+  const { user: authUser, isAdmin, isSecretaria } = useAuth();
   
   const [searchQuery, setSearchQuery] = useState('');
   const [products, setProducts] = useState<CanonicalProduct[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [serviceOrders, setServiceOrders] = useState<ServiceOrder[]>([]);
-  const [stocks, setStocks] = useState<InventoryStock[]>([]);
-  const [invoices, setInvoices] = useState<IngestedInvoice[]>([]);
   
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [copiedSipap, setCopiedSipap] = useState(false);
   const [dbStatus, setDbStatus] = useState<string>('Verificando...');
 
   useEffect(() => {
-    const user = StorageService.getCurrentUser();
-    setCurrentUser(user);
-    setPermissions(StorageService.getUserPermissions(user));
-
     setProducts(StorageService.getProducts());
     setBudgets(StorageService.getBudgets());
     setProjects(StorageService.getProjects());
     setServiceOrders(StorageService.getServiceOrders());
-    setStocks(StorageService.getStocks());
-    setInvoices(StorageService.getInvoices());
 
-    // Verificar salud de Neon DB
+    // Estado del sistema
     fetch('/api/db/health')
       .then(res => res.json())
       .then(data => {
         if (data.status === 'connected') {
-          setDbStatus(`Neon Cloud • ${data.stats?.products || 13} productos`);
+          setDbStatus('Sistema Conectado');
         } else {
           setDbStatus('Local-First Activo');
         }
@@ -107,7 +101,7 @@ export default function DashboardPage() {
   };
 
   const handleShareWhatsApp = (budget: Budget) => {
-    const text = `*PRESUPUESTO ELÉCTRICO* ⚡\n*Construlogica Emprendimientos S.A.*\n\n*Cliente:* ${budget.client.name}\n*Comprobante:* ${budget.budget_number}\n*Total:* ${formatPYG(budget.total_sale_pyg)} (IVA 10% incluido)\n*Validez:* 15 días\n\n_Generado profesionalmente por el Sistema Comercial._`;
+    const text = `*PRESUPUESTO ELÉCTRICO* ⚡\n*Construlogica Emprendimientos S.A.*\n\n*Cliente:* ${budget.client.name}\n*Comprobante:* ${budget.budget_number}\n*Total:* ${formatPYG(budget.total_sale_pyg)} (IVA 10% incluido)\n*Validez:* 15 días\n\n_Generado por ElectroCotiza._`;
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   };
 
@@ -119,59 +113,44 @@ export default function DashboardPage() {
     setTimeout(() => setCopiedSipap(false), 3000);
   };
 
-  // --- CÁLCULO DE LOS 7 INDICADORES EXIGIDOS POR EL REQUERIMIENTO ---
-  // 1. Presupuestos por estado
+  // Indicadores
   const presupuestosBorrador = budgets.filter(b => b.status === 'draft').length;
   const presupuestosPendientes = budgets.filter(b => b.status === 'pending_authorization').length;
   const presupuestosEnviados = budgets.filter(b => b.status === 'sent').length;
   const presupuestosAprobados = budgets.filter(b => b.status === 'accepted').length;
 
-  // 2. Importe total presupuestos enviados
   const importeEnviados = budgets
     .filter(b => b.status === 'sent')
     .reduce((acc, b) => acc + (b.total_sale_pyg || 0), 0);
 
-  // 3. Importe presupuestos aprobados
   const importeAprobados = budgets
     .filter(b => b.status === 'accepted')
     .reduce((acc, b) => acc + (b.total_sale_pyg || 0), 0);
 
-  // 4. Proyectos activos
   const proyectosActivos = projects.filter(p => p.status === 'en_ejecucion' || p.status === 'en_pruebas').length;
 
-  // 5. Materiales pendientes de recepción en obras
-  let materialesPendientesRecepcion = 0;
-  projects.forEach(p => {
-    p.materials?.forEach(m => {
-      if ((m.quantity_pending || 0) > 0) materialesPendientesRecepcion++;
-    });
-  });
-
-  // 6. Precios desactualizados (> 60 días)
-  const staleCount = products.filter(p => isPriceStale(p.last_price_date, 60)).length;
-
-  // 7. Órdenes de servicio pendientes
-  const ordenesPendientes = serviceOrders.filter(o => o.status === 'pendiente' || o.status === 'en_proceso').length;
+  const firstName = authUser?.full_name?.split(' ')[0] || 'Bienvenido';
+  const roleName = authUser?.role === 'admin' ? 'Administrador' : authUser?.role === 'secretaria' ? 'Secretaria' : authUser?.role || 'Usuario';
 
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-6 py-6 space-y-6">
       
-      {/* 1. HERO CABECERA: SALUDO Y BUSCADOR INTELIGENTE */}
-      <div className="bg-[#0B1526] border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl text-white space-y-4">
+      {/* 1. CABECERA CON BIENVENIDA Y ACCIONES RÁPIDAS PARA SECRETARIA */}
+      <div className="bg-[#0B1526] border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl text-white space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center space-x-3">
             <div className="w-11 h-11 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center font-black text-base shadow-md shadow-amber-400/25">
-              {currentUser?.full_name?.substring(0, 2).toUpperCase() || 'LD'}
+              {authUser?.full_name ? authUser.full_name.substring(0, 2).toUpperCase() : 'EC'}
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <span className="text-xs font-semibold text-slate-400">¡Hola, {currentUser?.full_name?.split(' ')[0] || 'Lucas'}!</span>
-                <span className="text-[10px] font-mono font-bold bg-amber-400/20 text-amber-300 px-2 py-0.5 rounded border border-amber-400/30 uppercase">
-                  Rol: {currentUser?.role}
+                <span className="text-xs font-semibold text-slate-400">¡Hola, {firstName}!</span>
+                <span className="text-[10px] font-bold bg-amber-400/20 text-amber-300 px-2 py-0.5 rounded border border-amber-400/30">
+                  {roleName}
                 </span>
               </div>
               <h1 className="text-base sm:text-xl font-black text-white leading-tight">
-                Panel de Control Comercial & Operativo
+                Panel de Gestión ElectroCotiza
               </h1>
             </div>
           </div>
@@ -182,6 +161,41 @@ export default function DashboardPage() {
               <span>{dbStatus}</span>
             </div>
           </div>
+        </div>
+
+        {/* ACCIONES RÁPIDAS PRINCIPALES (SECRETARIA PERSONA) */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1 border-t border-slate-800/80">
+          <Link
+            href="/presupuestos/nuevo"
+            className="p-3 bg-amber-400 hover:bg-amber-300 text-slate-950 rounded-xl font-bold text-xs flex items-center justify-center space-x-2 shadow-md shadow-amber-400/20 transition-all active:scale-95"
+          >
+            <Plus className="w-4 h-4 stroke-[3]" />
+            <span>+ Nuevo Presupuesto</span>
+          </Link>
+
+          <Link
+            href="/catalogo"
+            className="p-3 bg-slate-800/90 hover:bg-slate-700 text-white rounded-xl font-semibold text-xs flex items-center justify-center space-x-2 border border-slate-700 transition-colors"
+          >
+            <Package className="w-4 h-4 text-blue-400" />
+            <span>Productos y Precios</span>
+          </Link>
+
+          <Link
+            href="/ingesta"
+            className="p-3 bg-slate-800/90 hover:bg-slate-700 text-white rounded-xl font-semibold text-xs flex items-center justify-center space-x-2 border border-slate-700 transition-colors"
+          >
+            <Camera className="w-4 h-4 text-emerald-400" />
+            <span>Facturas de Compra</span>
+          </Link>
+
+          <Link
+            href="/clientes"
+            className="p-3 bg-slate-800/90 hover:bg-slate-700 text-white rounded-xl font-semibold text-xs flex items-center justify-center space-x-2 border border-slate-700 transition-colors"
+          >
+            <Users className="w-4 h-4 text-amber-300" />
+            <span>Clientes</span>
+          </Link>
         </div>
 
         {/* BUSCADOR RÁPIDO DE PRECIOS */}
@@ -196,50 +210,42 @@ export default function DashboardPage() {
           />
           <button
             type="submit"
-            className="absolute right-1.5 top-1.5 px-3.5 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black rounded-lg text-xs transition-all active:scale-95"
+            className="absolute right-1.5 top-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg text-xs transition-all active:scale-95"
           >
             Buscar
           </button>
         </form>
       </div>
 
-      {/* 2. LOS 7 INDICADORES OPERATIVOS Y COMERCIALES (KPIS) */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+      {/* 2. TARJETAS DE INDICADORES PRINCIPALES */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         
-        {/* KPI 1: Presupuestos por Estado */}
+        {/* KPI 1: Presupuestos en Borrador */}
         <Link href="/presupuestos" className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:border-blue-300 transition-colors">
-          <span className="text-[11px] font-bold text-slate-500 uppercase block">Presupuestos por Estado</span>
-          <div className="flex items-center space-x-1.5 mt-2">
-            <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-blue-100 text-blue-800" title="Enviados">
-              {presupuestosEnviados} env
-            </span>
-            <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-100 text-emerald-800" title="Aprobados">
-              {presupuestosAprobados} apr
-            </span>
-            <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-100 text-amber-800" title="Pendientes">
-              {presupuestosPendientes} pend
-            </span>
+          <span className="text-[11px] font-bold text-slate-500 uppercase block">Borradores Pendientes</span>
+          <div className="text-2xl font-black text-slate-900 font-mono mt-1">
+            {presupuestosBorrador}
           </div>
-          <span className="text-[10px] text-slate-400 block mt-1.5">Total {budgets.length} cotizaciones</span>
+          <span className="text-[10px] text-blue-600 font-semibold block mt-1">Listos para continuar →</span>
         </Link>
 
-        {/* KPI 2: Importe Presupuestos Enviados */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-          <span className="text-[11px] font-bold text-slate-500 uppercase block">Enviados en Negociación</span>
+        {/* KPI 2: Presupuestos Enviados */}
+        <Link href="/presupuestos" className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:border-blue-300 transition-colors">
+          <span className="text-[11px] font-bold text-slate-500 uppercase block">Enviados al Cliente</span>
           <div className="text-base sm:text-lg font-black text-blue-900 font-mono mt-1 truncate">
             {formatPYG(importeEnviados)}
           </div>
-          <span className="text-[10px] text-slate-400 block mt-1">Ofertas activas con clientes</span>
-        </div>
+          <span className="text-[10px] text-slate-400 block mt-1">{presupuestosEnviados} presupuestos activos</span>
+        </Link>
 
         {/* KPI 3: Presupuestos Aprobados */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-          <span className="text-[11px] font-bold text-slate-500 uppercase block">Contratos Aprobados</span>
+        <Link href="/presupuestos" className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:border-blue-300 transition-colors">
+          <span className="text-[11px] font-bold text-slate-500 uppercase block">Presupuestos Aprobados</span>
           <div className="text-base sm:text-lg font-black text-emerald-700 font-mono mt-1 truncate">
             {formatPYG(importeAprobados)}
           </div>
-          <span className="text-[10px] text-slate-400 block mt-1">{presupuestosAprobados} obras aceptadas</span>
-        </div>
+          <span className="text-[10px] text-slate-400 block mt-1">{presupuestosAprobados} trabajos confirmados</span>
+        </Link>
 
         {/* KPI 4: Proyectos Activos */}
         <Link href="/proyectos" className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:border-blue-300 transition-colors">
@@ -247,99 +253,53 @@ export default function DashboardPage() {
           <div className="text-2xl font-black text-slate-900 font-mono mt-1">
             {proyectosActivos}
           </div>
-          <span className="text-[10px] text-blue-600 font-semibold block mt-1">En ejecución y comisionamiento →</span>
+          <span className="text-[10px] text-blue-600 font-semibold block mt-1">En ejecución técnica →</span>
         </Link>
-
-        {/* KPI 5: Materiales Pendientes de Recepción */}
-        <Link href="/inventario" className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:border-blue-300 transition-colors">
-          <span className="text-[11px] font-bold text-slate-500 uppercase block">Materiales Pend. Obra</span>
-          <div className="text-2xl font-black text-amber-700 font-mono mt-1">
-            {materialesPendientesRecepcion}
-          </div>
-          <span className="text-[10px] text-slate-400 block mt-1">Líneas pendientes en pañol</span>
-        </Link>
-
-        {/* KPI 6: Precios Desactualizados (> 60 días) */}
-        <Link href="/catalogo" className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:border-blue-300 transition-colors">
-          <span className="text-[11px] font-bold text-slate-500 uppercase block">Precios Viejos (&gt; 60 d)</span>
-          <div className="text-2xl font-black text-rose-700 font-mono mt-1">
-            {staleCount}
-          </div>
-          <span className="text-[10px] text-rose-600 font-semibold block mt-1">Requieren actualización →</span>
-        </Link>
-
-        {/* KPI 7: Órdenes de Servicio Pendientes */}
-        <Link href="/ordenes-servicio" className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:border-blue-300 transition-colors">
-          <span className="text-[11px] font-bold text-slate-500 uppercase block">Órdenes de Servicio</span>
-          <div className="text-2xl font-black text-blue-800 font-mono mt-1">
-            {ordenesPendientes} pend
-          </div>
-          <span className="text-[10px] text-slate-400 block mt-1">{serviceOrders.length} órdenes en total</span>
-        </Link>
-
-        {/* ACCIÓN RÁPIDA SIPAP */}
-        <button
-          type="button"
-          onClick={handleCopySipap}
-          className="bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-xl p-4 text-left transition-colors"
-        >
-          <span className="text-[11px] font-bold text-amber-900 uppercase block">Cuenta SIPAP Continental</span>
-          <div className="text-sm font-mono font-black text-slate-900 mt-1">
-            {copiedSipap ? '¡Copiado al Portapapeles!' : '01-248900-05'}
-          </div>
-          <span className="text-[10px] text-amber-800 block mt-1">Click para copiar datos de pago</span>
-        </button>
 
       </div>
 
-      {/* 3. HUB DE MÓDULOS DEL SISTEMA */}
+      {/* 3. MÓDULOS DE GESTIÓN */}
       <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
         <h2 className="text-xs font-bold text-slate-900 uppercase tracking-wide">
-          Acceso Rápido a Módulos Conectados:
+          Módulos del Sistema:
         </h2>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
           
           <Link href="/presupuestos" className="p-3.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded-xl transition-all group text-center">
             <FileText className="w-6 h-6 text-blue-700 mx-auto group-hover:scale-110 transition-transform" />
             <span className="font-bold text-xs text-slate-800 block mt-2">Presupuestos</span>
-            <span className="text-[10px] text-slate-400">8 Etapas</span>
+            <span className="text-[10px] text-slate-400">3 Pasos</span>
+          </Link>
+
+          <Link href="/catalogo" className="p-3.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded-xl transition-all group text-center">
+            <Package className="w-6 h-6 text-blue-700 mx-auto group-hover:scale-110 transition-transform" />
+            <span className="font-bold text-xs text-slate-800 block mt-2">Productos</span>
+            <span className="text-[10px] text-slate-400">Precios y Marcas</span>
+          </Link>
+
+          <Link href="/ingesta" className="p-3.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded-xl transition-all group text-center">
+            <Camera className="w-6 h-6 text-blue-700 mx-auto group-hover:scale-110 transition-transform" />
+            <span className="font-bold text-xs text-slate-800 block mt-2">Facturas</span>
+            <span className="text-[10px] text-slate-400">Compras de Obra</span>
           </Link>
 
           <Link href="/proyectos" className="p-3.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded-xl transition-all group text-center">
             <Briefcase className="w-6 h-6 text-blue-700 mx-auto group-hover:scale-110 transition-transform" />
             <span className="font-bold text-xs text-slate-800 block mt-2">Proyectos</span>
-            <span className="text-[10px] text-slate-400">Seguimiento</span>
+            <span className="text-[10px] text-slate-400">Montaje y Obras</span>
           </Link>
 
-          <Link href="/finanzas" className="p-3.5 bg-slate-50 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 rounded-xl transition-all group text-center">
-            <DollarSign className="w-6 h-6 text-emerald-700 mx-auto group-hover:scale-110 transition-transform" />
-            <span className="font-bold text-xs text-slate-800 block mt-2">Finanzas</span>
-            <span className="text-[10px] text-slate-400">Hitos & Gastos</span>
+          <Link href="/clientes" className="p-3.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded-xl transition-all group text-center">
+            <Users className="w-6 h-6 text-blue-700 mx-auto group-hover:scale-110 transition-transform" />
+            <span className="font-bold text-xs text-slate-800 block mt-2">Clientes</span>
+            <span className="text-[10px] text-slate-400">Empresas & Obras</span>
           </Link>
 
           <Link href="/inventario" className="p-3.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded-xl transition-all group text-center">
             <Layers className="w-6 h-6 text-blue-700 mx-auto group-hover:scale-110 transition-transform" />
             <span className="font-bold text-xs text-slate-800 block mt-2">Inventario</span>
-            <span className="text-[10px] text-slate-400">Almacenes</span>
-          </Link>
-
-          <Link href="/ordenes-servicio" className="p-3.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded-xl transition-all group text-center">
-            <Wrench className="w-6 h-6 text-blue-700 mx-auto group-hover:scale-110 transition-transform" />
-            <span className="font-bold text-xs text-slate-800 block mt-2">Órdenes (OS)</span>
-            <span className="text-[10px] text-slate-400">Técnicas</span>
-          </Link>
-
-          <Link href="/checklists" className="p-3.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded-xl transition-all group text-center">
-            <ShieldCheck className="w-6 h-6 text-blue-700 mx-auto group-hover:scale-110 transition-transform" />
-            <span className="font-bold text-xs text-slate-800 block mt-2">Checklists</span>
-            <span className="text-[10px] text-slate-400">Normas ANDE</span>
-          </Link>
-
-          <Link href="/reportes" className="p-3.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded-xl transition-all group text-center">
-            <BarChart3 className="w-6 h-6 text-blue-700 mx-auto group-hover:scale-110 transition-transform" />
-            <span className="font-bold text-xs text-slate-800 block mt-2">Reportes</span>
-            <span className="text-[10px] text-slate-400">Exportar CSV</span>
+            <span className="text-[10px] text-slate-400">Pañol</span>
           </Link>
 
         </div>
@@ -357,48 +317,59 @@ export default function DashboardPage() {
         </div>
 
         <div className="space-y-3">
-          {budgets.slice(0, 5).map(b => (
-            <div key={b.id} className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-              <div>
-                <div className="flex items-center space-x-2">
-                  <span className="font-mono font-bold text-blue-900">{b.budget_number}</span>
-                  <span className="text-slate-400 font-mono">{formatDatePY(b.created_at.split('T')[0])}</span>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800">
-                    {b.status}
-                  </span>
-                </div>
-                <h3 className="font-bold text-sm text-slate-900 mt-1">{b.title}</h3>
-                <span className="text-slate-600">Cliente: <strong>{b.client.name}</strong></span>
-              </div>
+          {budgets.slice(0, 5).map(b => {
+            const statusInfo = STATUS_SPANISH[b.status] || { label: b.status, bg: 'bg-slate-100', text: 'text-slate-700' };
 
-              <div className="flex items-center space-x-3">
-                <div className="text-right">
-                  <span className="text-[10px] text-slate-400 uppercase font-semibold block">Total Facturado</span>
-                  <span className="font-mono font-black text-slate-950 text-base">{formatPYG(b.total_sale_pyg)}</span>
+            return (
+              <div key={b.id} className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <span className="font-mono font-bold text-blue-900">{b.budget_number}</span>
+                    <span className="text-slate-400 font-mono">{formatDatePY(b.created_at.split('T')[0])}</span>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${statusInfo.bg} ${statusInfo.text}`}>
+                      {statusInfo.label}
+                    </span>
+                  </div>
+                  <h3 className="font-bold text-sm text-slate-900 mt-1">{b.title}</h3>
+                  <span className="text-slate-600">Cliente: <strong>{b.client.name}</strong></span>
                 </div>
 
-                <div className="flex items-center space-x-1 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => handleDownloadPDF(b)}
-                    disabled={downloadingId === b.id}
-                    className="p-2 text-slate-600 hover:bg-white hover:text-blue-900 border border-slate-300 rounded-lg transition-colors"
-                    title="Descargar PDF"
-                  >
-                    <Download className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleShareWhatsApp(b)}
-                    className="p-2 text-emerald-700 hover:bg-emerald-50 border border-emerald-300 rounded-lg transition-colors"
-                    title="Compartir por WhatsApp"
-                  >
-                    <Share2 className="w-4 h-4" />
-                  </button>
+                <div className="flex items-center space-x-3">
+                  <div className="text-right">
+                    <span className="text-[10px] text-slate-400 uppercase font-semibold block">Total del Presupuesto</span>
+                    <span className="font-mono font-black text-slate-950 text-base">{formatPYG(b.total_sale_pyg)}</span>
+                  </div>
+
+                  <div className="flex items-center space-x-1.5 shrink-0">
+                    <Link
+                      href={`/presupuestos/nuevo?edit=${b.id}`}
+                      className="px-2.5 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 font-semibold rounded-lg text-xs"
+                      title="Editar en el asistente"
+                    >
+                      Editar
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadPDF(b)}
+                      disabled={downloadingId === b.id}
+                      className="p-1.5 text-slate-600 hover:bg-white hover:text-blue-900 border border-slate-300 rounded-lg transition-colors"
+                      title="Descargar PDF"
+                    >
+                      <Download className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleShareWhatsApp(b)}
+                      className="p-1.5 text-emerald-700 hover:bg-emerald-50 border border-emerald-300 rounded-lg transition-colors"
+                      title="Compartir por WhatsApp"
+                    >
+                      <Share2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
